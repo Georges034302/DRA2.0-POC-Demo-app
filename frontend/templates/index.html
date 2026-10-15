@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block main %}
+<section class="hero"><div><p class="eyebrow">WORKSPACE / OVERVIEW</p><h1>Focus on what matters.</h1><p class="subtitle">Organize work, change priorities, and track progress in real time.</p></div><span class="hero-label">TASK BOARD <span class="live-dot"></span></span></section>
+<div class="layout"><section class="panel composer"><div class="section-top"><h2>Create a task</h2><span class="sub-label">NEW</span></div>
+<form hx-post="/tasks" hx-target="#task-results" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()">
+<label for="title">Task title</label><input id="title" name="title" required maxlength="120" placeholder="e.g. Verify database API">
+<label for="description">Description <span class="optional">optional</span></label><textarea id="description" name="description" maxlength="2000" rows="4" placeholder="Add a little context..."></textarea>
+<div class="form-row"><div><label for="priority">Priority</label><select id="priority" name="priority"><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select></div><div><label for="status">Status</label><select id="status" name="status"><option value="todo">To do</option><option value="in_progress">In progress</option><option value="done">Done</option></select></div></div>
+<button class="btn primary" type="submit"><span>＋</span> Create task</button></form></section>
+<section class="panel board"><div class="section-top"><div><h2>Tasks</h2><p class="sub-label">Your team’s current work</p></div><button class="btn subtle" hx-get="/tasks" hx-target="#task-results" title="Refresh tasks">↻ Refresh</button></div>
+<div class="filters"><label class="filter-label">Status<select name="status" id="filter-status" aria-label="Filter status" hx-get="/tasks" hx-trigger="change" hx-target="#task-results" hx-include="[name='priority-filter']"><option value="">All statuses</option><option value="todo">To do</option><option value="in_progress">In progress</option><option value="done">Done</option></select></label><label class="filter-label">Priority<select name="priority" aria-label="Filter priority" id="priority-filter" hx-get="/tasks" hx-trigger="change" hx-target="#task-results" hx-include="#filter-status"><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label></div>
+<div id="task-results" aria-live="polite">{% include "tasks.html" %}</div></section></div>
+{% endblock %}

@@ -1,0 +1,34 @@
+services:
+  database:
+    build: ./database
+    environment:
+      DATABASE_PATH: /data/tasks.db
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Required}
+    volumes:
+      - sqlite_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health',timeout=3)"]
+      interval: 10s
+      timeout: 4s
+      retries: 5
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: http://database:5000
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Required}
+    depends_on:
+      database:
+        condition: service_healthy
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:8080"
+    environment:
+      BACKEND_URL: http://backend:5000
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Required}
+      DEMO_USERNAME: ${DEMO_USERNAME:?Required}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?Required}
+    depends_on:
+      - backend
+volumes:
+  sqlite_data:

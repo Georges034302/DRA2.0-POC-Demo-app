@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>DRA 2.0 · Task Manager</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="{{ url_for('static',filename='theme.js') }}" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/"><span class="brand-icon">◈</span> DRA <b>2.0</b><span class="brand-sub">Task Manager</span></a><button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode"><span id="theme-symbol">◐</span> <span id="theme-name">Theme</span></button></header>
+<main class="shell">{% block main %}{% endblock %}</main>
+<footer class="footnote">DRA 2.0 · Research proof of concept · Flask / HTMX / SQLite</footer>
+</body></html>

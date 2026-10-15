@@ -1,0 +1,50 @@
+name: DRA 2.0 Post-Deployment
+on:
+  workflow_run:
+    workflows: ['DRA 2.0 CI/CD']
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  verify:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.head_branch == 'main') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Collect operational evidence and invoke scanner
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_FRONTEND_APP: ${{ vars.AZURE_FRONTEND_APP }}
+          AZURE_BACKEND_APP: ${{ vars.AZURE_BACKEND_APP }}
+          AZURE_DATABASE_APP: ${{ vars.AZURE_DATABASE_APP }}
+          BROKER_IMAGE_DIGEST: ${{ vars.BROKER_IMAGE_DIGEST }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          GHCR_USER: ${{ vars.GHCR_USER }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER }}
+          BROKER_INPUT_DIR: ${{ runner.temp }}/post-input
+          BROKER_OUTPUT_DIR: ${{ runner.temp }}/post-results
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: bash scripts/post-deploy.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: post-deployment-evidence
+          path: |
+            ${{ runner.temp }}/post-input/
+            ${{ runner.temp }}/post-results/
+          if-no-files-found: warn
+          retention-days: 30
