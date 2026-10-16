@@ -1,23 +1,15 @@
-# Contributions
+# Contribution Policy
 
-This repository is proprietary. Obtain prior written permission from the copyright holder through an authorized channel before copying, modifying, testing, or submitting changes. Public visibility does not grant those rights; see the [license](../LICENSE).
+This proprietary proof of concept is not open to external contributions. Unsolicited pull requests and code submissions are not accepted. It is a demonstration, not a production-ready product or an open-source collaboration project.
 
-## Propose a Change
+Public visibility does not grant permission to copy, modify, test, deploy, or reuse this project. Any separately authorized work requires prior written permission from the copyright holder through an authorized channel and remains subject to the [license](../LICENSE).
 
-- Agree on scope with the maintainer before implementation.
-- For bugs, describe the expected behavior, actual behavior, and reproduction steps.
-- Remove credentials, tokens, personal data, and sensitive evidence from reports.
+## AI-Broker Scope
 
-## Prepare an Authorized Contribution
+This repository contains the demo application and the CI/CD workflows that invoke AI-Broker. The private broker is maintained separately; its source and package access are not provided by this repository.
 
-- Keep changes focused and follow the surrounding code style.
-- Add or update tests alongside the affected service.
-- Update relevant documentation when behavior or configuration changes.
-- Run the checks in [Usage](USAGE.MD#test-and-build).
-- Never commit `.env`, live credentials, or private broker source.
+AI-Broker reviews selected evidence using Gemini or Groq and returns policy outcomes. The consuming workflows enforce approval and deployment gates; the broker does not build, deploy, modify code, or roll back the application.
 
-## Submit for Review
-
-Include the change's purpose, related issue if available, test results, and any deployment or data risks. Add screenshots for UI changes. Submission does not alter the repository's license or grant additional rights.
+Never include credentials, tokens, personal data, sensitive evidence, or private broker source in public issues or other public communications.
 
 [Documentation index](index.MD)

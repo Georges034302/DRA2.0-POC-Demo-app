@@ -71,10 +71,10 @@ The broker scans evidence and reports policy outcomes; the consuming workflows e
 
 - [Documentation index](docs/index.MD)
 - [Usage and setup](docs/USAGE.MD)
-- [Contributions](docs/CONTRIBUTING.md)
+- [Contribution policy](docs/CONTRIBUTING.md)
 - [Glossary](docs/glossary.md)
 
-This is a proof of concept, not a production deployment. See the usage guide for storage and evidence-privacy limitations.
+This is a proof of concept, not a production deployment, and is not open to external contributions. See the usage guide for storage and evidence-privacy limitations.
 
 ## License
 

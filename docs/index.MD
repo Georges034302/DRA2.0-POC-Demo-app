@@ -3,7 +3,7 @@
 | Guide | Contents |
 | --- | --- |
 | [Usage](USAGE.MD) | Local setup, tests, builds, and Azure configuration. |
-| [Contributions](CONTRIBUTING.md) | Permission requirements and change guidelines. |
+| [Contribution policy](CONTRIBUTING.md) | No external contributions; proprietary POC and AI-Broker scope. |
 | [Glossary](glossary.md) | Project terminology and review outcomes. |
 
 ## Repository Map
