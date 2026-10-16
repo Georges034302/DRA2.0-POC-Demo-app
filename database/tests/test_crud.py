@@ -10,6 +10,7 @@ sys.path.insert(0, str(DATABASE_DIR))
 import crud
 
 
+# Initialize an isolated temporary database before each test.
 @pytest.fixture(autouse=True)
 def database(tmp_path, monkeypatch):
     path = tmp_path / 'data' / 'tasks.db'
@@ -18,11 +19,13 @@ def database(tmp_path, monkeypatch):
     return path
 
 
+# Provide a fresh, valid task payload for each test.
 @pytest.fixture
 def fields():
     return {'title': 'Example', 'description': '', 'priority': 'low', 'status': 'todo'}
 
 
+# Load the database API with test authentication and exception propagation.
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv('INTERNAL_API_TOKEN', 'test-token')
@@ -34,6 +37,7 @@ def client(monkeypatch):
 HEADERS = {'X-Service-Token': 'test-token'}
 
 
+# Verify invalid fields cannot create tasks or alter existing rows.
 @pytest.mark.parametrize('field,value', [
     ('title', 123),
     ('title', []),
@@ -60,6 +64,7 @@ def test_write_rejects_invalid_fields(fields, field, value, operation):
     assert crud.listing() == [original]
 
 
+# Reject non-object payloads and missing required task fields.
 @pytest.mark.parametrize('payload', [None, [], 'text', {}, {'title': 'Example'}])
 def test_write_requires_complete_object(payload):
     with pytest.raises(ValueError):
@@ -67,6 +72,7 @@ def test_write_requires_complete_object(payload):
     assert crud.listing() == []
 
 
+# Exercise creation, retrieval, replacement, timestamps, and deletion.
 def test_crud(fields):
     task = crud.insert(fields)
     assert task['id'] > 0
@@ -91,12 +97,14 @@ def test_crud(fields):
     assert crud.delete(task['id']) is False
 
 
+# Verify missing task IDs return None or False without creating rows.
 def test_missing_task(fields):
     assert crud.find(999) is None
     assert crud.update(999, fields) is None
     assert crud.delete(999) is False
 
 
+# Check newest-first ordering and individual or combined filters.
 def test_listing_filters_and_order(fields):
     first = crud.insert(fields)
     second = crud.insert(dict(fields, priority='high', status='done'))
@@ -108,12 +116,14 @@ def test_listing_filters_and_order(fields):
     assert crud.listing(status='done', priority='low') == []
 
 
+# Reject unsupported or empty filter values in the CRUD layer.
 @pytest.mark.parametrize('filters', [{'status': 'unknown'}, {'priority': 'urgent'}, {'status': ''}])
 def test_invalid_filters(filters):
     with pytest.raises(ValueError):
         crud.listing(**filters)
 
 
+# Confirm repeated initialization preserves the database file and task data.
 def test_init_preserves_existing_data(database, fields):
     task = crud.insert(fields)
     crud.init()
@@ -121,6 +131,7 @@ def test_init_preserves_existing_data(database, fields):
     assert crud.listing() == [task]
 
 
+# Restore earlier changes in a transaction when a later statement fails.
 def test_connection_rolls_back(fields):
     original = crud.insert(fields)
     with pytest.raises(sqlite3.IntegrityError):
@@ -130,6 +141,7 @@ def test_connection_rolls_back(fields):
     assert crud.listing() == [original]
 
 
+# Check whitespace normalization and acceptance of maximum text lengths.
 def test_text_normalization_and_limits(fields):
     task = crud.insert(dict(fields, title='  Example  ', description='  Details  '))
     assert task['title'] == 'Example'
@@ -139,6 +151,7 @@ def test_text_normalization_and_limits(fields):
     assert len(task['description']) == 2000
 
 
+# Confirm SQL-like task text is stored as data rather than executed.
 def test_sql_values_are_not_executed(fields):
     title = "Example'); DROP TABLE tasks; --"
     task = crud.insert(dict(fields, title=title))
@@ -146,6 +159,7 @@ def test_sql_values_are_not_executed(fields):
     assert len(crud.listing()) == 1
 
 
+# Exercise authenticated CRUD routes, filters, response codes, and missing IDs.
 def test_api_crud(client, fields):
     assert client.get('/internal/tasks', headers=HEADERS).get_json() == []
     response = client.post('/internal/tasks', json=fields, headers=HEADERS)
@@ -169,6 +183,7 @@ def test_api_crud(client, fields):
     assert client.delete(url, headers=HEADERS).status_code == 404
 
 
+# Require authentication on every task route, including malformed token values.
 @pytest.mark.parametrize('method,url', [
     ('get', '/internal/tasks'),
     ('get', '/internal/tasks/1'),
@@ -182,11 +197,13 @@ def test_api_requires_token(client, method, url, token):
     assert getattr(client, method)(url, headers=headers).status_code == 401
 
 
+# Deny task access when no expected service token is configured.
 def test_api_fails_closed_without_configured_token(client, monkeypatch):
     monkeypatch.delenv('INTERNAL_API_TOKEN')
     assert client.get('/internal/tasks', headers=HEADERS).status_code == 401
 
 
+# Return 400 for invalid write payloads without persisting tasks.
 @pytest.mark.parametrize('method,url', [('post', '/internal/tasks'), ('put', '/internal/tasks/1')])
 @pytest.mark.parametrize('payload', [None, [], {}, {'title': []}, {
     'title': [], 'description': '', 'priority': 'low', 'status': 'todo',
@@ -197,6 +214,7 @@ def test_api_rejects_invalid_payload(client, method, url, payload):
     assert crud.listing() == []
 
 
+# Return 400 when write requests contain malformed JSON.
 @pytest.mark.parametrize('method,url', [('post', '/internal/tasks'), ('put', '/internal/tasks/1')])
 def test_api_rejects_malformed_json(client, method, url):
     response = getattr(client, method)(
@@ -205,11 +223,13 @@ def test_api_rejects_malformed_json(client, method, url):
     assert response.status_code == 400
 
 
+# Return 400 for unsupported or empty API filter values.
 @pytest.mark.parametrize('query', ['status=unknown', 'priority=urgent', 'status='])
 def test_api_rejects_invalid_filters(client, query):
     assert client.get(f'/internal/tasks?{query}', headers=HEADERS).status_code == 400
 
 
+# Keep health public and report 503 when the task table is missing.
 def test_health_checks_schema_without_authentication(client):
     response = client.get('/health')
     assert response.status_code == 200
@@ -221,6 +241,7 @@ def test_health_checks_schema_without_authentication(client):
     assert response.get_json()['status'] == 'unhealthy'
 
 
+# Report unhealthy status when the configured database directory is unusable.
 def test_health_handles_unusable_path(client, tmp_path, monkeypatch):
     blocker = tmp_path / 'not-a-directory'
     blocker.write_text('blocked', encoding='utf-8')

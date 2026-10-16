@@ -8,6 +8,7 @@ PRIORITIES = ("low", "medium", "high")
 STATUSES = ("todo", "in_progress", "done")
 
 
+# Validate a complete task payload and normalize its text fields.
 def validate_fields(fields):
     if not isinstance(fields, dict):
         raise ValueError("Expected a JSON object")
@@ -31,6 +32,7 @@ def validate_fields(fields):
     )
 
 
+# Open a connection, commit on success, and roll back on failure.
 @contextmanager
 def connection():
     path = os.getenv("DATABASE_PATH", "/data/tasks.db")
@@ -48,11 +50,13 @@ def connection():
         db.close()
 
 
+# Create missing tables and indexes without replacing existing data.
 def init():
     with connection() as db:
         db.executescript(SCHEMA)
 
 
+# Return tasks newest first, optionally filtered by status and priority.
 def listing(status=None, priority=None):
     if status is not None and status not in STATUSES:
         raise ValueError("Invalid status")
@@ -71,12 +75,14 @@ def listing(status=None, priority=None):
         return [dict(row) for row in db.execute(sql, args).fetchall()]
 
 
+# Return a task by ID, or None when it does not exist.
 def find(task_id):
     with connection() as db:
         row = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
         return dict(row) if row else None
 
 
+# Validate and create a task, returning the stored row.
 def insert(fields):
     fields = validate_fields(fields)
     with connection() as db:
@@ -88,6 +94,7 @@ def insert(fields):
         return dict(row)
 
 
+# Replace task fields and refresh the timestamp, or return None if missing.
 def update(task_id, fields):
     fields = validate_fields(fields)
     with connection() as db:
@@ -102,6 +109,7 @@ def update(task_id, fields):
         return dict(row)
 
 
+# Delete a task and report whether a row was removed.
 def delete(task_id):
     with connection() as db:
         return db.execute("DELETE FROM tasks WHERE id=?", (task_id,)).rowcount > 0

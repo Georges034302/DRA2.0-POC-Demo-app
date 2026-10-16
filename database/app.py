@@ -10,6 +10,7 @@ app = Flask(__name__)
 crud.init()
 
 
+# Require the internal service token for every route except health checks.
 @app.before_request
 def protect():
     if request.path == '/health':
@@ -20,6 +21,7 @@ def protect():
         abort(401)
 
 
+# Report whether the database connection and task table are accessible.
 @app.get('/health')
 def health():
     try:
@@ -30,6 +32,7 @@ def health():
         return jsonify(service='database', status='unhealthy'), 503
 
 
+# List tasks with validated status and priority filters.
 @app.get('/internal/tasks')
 def list_tasks():
     try:
@@ -39,12 +42,14 @@ def list_tasks():
     return jsonify(tasks)
 
 
+# Fetch one task, returning 404 when the ID is missing.
 @app.get('/internal/tasks/<int:task_id>')
 def get_task(task_id):
     task = crud.find(task_id)
     return (jsonify(task), 200) if task else (jsonify(error='not found'), 404)
 
 
+# Create a task, returning 201 on success or 400 for invalid input.
 @app.post('/internal/tasks')
 def add_task():
     try:
@@ -54,6 +59,7 @@ def add_task():
     return jsonify(task), 201
 
 
+# Replace an existing task, rejecting invalid input and missing IDs.
 @app.put('/internal/tasks/<int:task_id>')
 def edit_task(task_id):
     try:
@@ -63,6 +69,7 @@ def edit_task(task_id):
     return (jsonify(task), 200) if task else (jsonify(error='not found'), 404)
 
 
+# Delete a task, returning 204 on success or 404 when missing.
 @app.delete('/internal/tasks/<int:task_id>')
 def remove_task(task_id):
     return ('', 204) if crud.delete(task_id) else (jsonify(error='not found'), 404)
