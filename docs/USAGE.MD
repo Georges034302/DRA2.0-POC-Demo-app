@@ -1,6 +1,7 @@
 # Usage
 
-Execution, testing, and deployment require prior written permission under the [license](../LICENSE). Run the commands below from the repository root.
+- Execution, testing, and deployment require prior written permission under the [license](../LICENSE).
+- Run commands from the repository root.
 
 ## Run Locally
 
@@ -10,7 +11,8 @@ Execution, testing, and deployment require prior written permission under the [l
 cp .env.example .env
 ```
 
-Edit `.env`: replace `INTERNAL_API_TOKEN`, `DEMO_USERNAME`, and `DEMO_PASSWORD` with strong, unique values. Never commit `.env`.
+- In `.env`, set strong, unique values for `INTERNAL_API_TOKEN`, `DEMO_USERNAME`, and `DEMO_PASSWORD`.
+- Never commit `.env`.
 
 ```sh
 docker compose up --build
@@ -39,58 +41,41 @@ bash -n scripts/*.sh
 bash scripts/build.sh
 ```
 
-## Azure Setup
+## Azure Scripts
 
-**Requirements:** Git, Docker, Python 3.12, Azure CLI, GitHub CLI, and access to the private broker image.
+- Use the repository scripts for Azure provisioning, publishing, and deployment.
+- This section references scripts; it is not an Azure setup walkthrough.
+- **Tools:** Git, Docker, Python 3.12, Azure CLI, and GitHub CLI.
+- **Access:** An authorized Azure session and access to the private broker image.
+- Required environment variables are declared in each script.
+- Variable and secret mappings are in the [release workflow](../.github/workflows/ci-cd.yml) and [post-deployment workflow](../.github/workflows/post-deployment.yml).
 
-1. Configure GitHub Actions OIDC federation and Azure permissions for ACR push and Container Apps deployment. Initial deployment may also need permission to assign `AcrPull` roles.
-2. Authenticate to Azure and provision the shared resources:
+| Step | Script | Responsibility |
+| --- | --- | --- |
+| Provision | [setup.sh](../scripts/setup.sh) | Validate prerequisites and call [env-setup.sh](../scripts/env-setup.sh) to create the resource group, ACR, and Container Apps environment. |
+| Build | [build.sh](../scripts/build.sh) | Build the three application images locally. With `--publish`, build and push to ACR, then save immutable digests in `BUILD_MANIFEST`. |
+| Review | [review.sh](../scripts/review.sh) | Prepare pre-deployment evidence and invoke the pinned AI-Broker image. |
+| Deploy | [deploy.sh](../scripts/deploy.sh) | Deploy the manifest's image digests for `GITHUB_SHA` to Container Apps without rebuilding. |
+| Verify | [post-deploy.sh](../scripts/post-deploy.sh) | Collect revision, log, and health evidence, then run a separate post-deployment broker scan. |
 
-```sh
-az login
-az account set --subscription YOUR_SUBSCRIPTION_ID
-export AZURE_RESOURCE_GROUP=your-resource-group
-export AZURE_LOCATION=your-azure-region
-export AZURE_ACR_NAME=youruniqueregistryname
-export AZURE_CONTAINERAPPS_ENV=your-container-apps-environment
-bash scripts/setup.sh
-```
-
-The setup script creates the resource group, registry, and Container Apps environment; it does not configure OIDC.
-
-3. Publish the private broker image and configure the repository settings below.
-4. Configure required reviewers on the `dra-approval` environment before setting `APPROVAL_GATE_ENABLED=true`.
-
-### Repository Variables
-
-| Variables | Purpose |
-| --- | --- |
-| `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Azure OIDC identity and subscription. |
-| `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION` | Target resource group and region. |
-| `AZURE_ACR_NAME`, `AZURE_CONTAINERAPPS_ENV` | Registry and Container Apps environment. |
-| `AZURE_FRONTEND_APP`, `AZURE_BACKEND_APP`, `AZURE_DATABASE_APP` | Container App names. |
-| `GHCR_USER` | Account with access to the private broker package. |
-| `BROKER_IMAGE_DIGEST` | Pinned reference: `ghcr.io/OWNER/IMAGE@sha256:...`. |
-| `AI_PROVIDER` | `gemini` or `groq`. |
-| `GEMINI_MODEL`, `GROQ_MODEL` | Model setting for the selected provider. |
-| `APPROVAL_GATE_ENABLED` | Enable only after required reviewers are configured. |
-
-### Repository Secrets
-
-| Secrets | Purpose |
-| --- | --- |
-| `GHCR_READ_TOKEN` | Private broker package access with `read:packages`. |
-| `GEMINI_API_KEY`, `GROQ_API_KEY` | Set the key for the selected provider. |
-| `INTERNAL_API_TOKEN` | Authentication between application services. |
-| `DEMO_USERNAME`, `DEMO_PASSWORD` | Demo sign-in credentials. |
+- Configure Azure OIDC federation and workflow permissions separately.
+- Deployment may need permission to assign `AcrPull` roles.
+- Pin `BROKER_IMAGE_DIGEST` to an approved GHCR digest.
+- Provide a GHCR token with `read:packages` access.
+- Store provider keys and application credentials in protected secrets.
+- Use the release workflow for gated deployment; the deployment script alone does not enforce broker review or human approval.
 
 ## Release Review
 
-The release workflow tests the app, publishes immutable image digests to ACR, and invokes the pinned broker. Deployment uses the reviewed digests without rebuilding.
-
-`FAIL` and `ERROR` block release. `APPROVAL_REQUIRED` requires the protected approval environment and `APPROVAL_GATE_ENABLED=true`.
-
-The separate post-deployment workflow checks Azure revisions and health, then invokes the broker. Its evidence is retained for 30 days; verification provides neither rollback nor ongoing monitoring.
+- Manually dispatch the [release workflow](../.github/workflows/ci-cd.yml) to test, publish, review, and deploy.
+- Automatic runs on pushes to `main` are currently disabled.
+- `FAIL` and `ERROR` block release.
+- `APPROVAL_REQUIRED` needs human approval through the protected `dra-approval` environment and `APPROVAL_GATE_ENABLED=true`.
+- Configure required reviewers before enabling approval-based releases.
+- All other required checks must also pass.
+- The separate [post-deployment workflow](../.github/workflows/post-deployment.yml) verifies deployment and retains evidence for 30 days.
+- AI-Broker scans evidence and reports policy outcomes only.
+- It does not build, deploy, roll back, or provide continuous monitoring.
 
 ## Limitations
 

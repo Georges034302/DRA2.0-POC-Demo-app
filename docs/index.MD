@@ -7,7 +7,7 @@ This proprietary proof of concept demonstrates a task-management application wit
 | [Project overview](../README.md) | Application architecture, AI-Broker flow, and broker exit codes. |
 | [Run locally](USAGE.MD#run-locally) | Docker Compose setup, authentication, and local storage. |
 | [Test and build](USAGE.MD#test-and-build) | Prerequisites and application validation commands. |
-| [Azure setup](USAGE.MD#azure-setup) | Azure resources, OIDC, private broker image access, variables, and secrets. |
+| [Azure scripts](USAGE.MD#azure-scripts) | Script entry points for provisioning, publishing, review, deployment, and verification. |
 | [Release review](USAGE.MD#release-review) | Pre-deployment gates, immutable image deployment, and separate post-deployment verification. |
 | [Limitations](USAGE.MD#limitations) | Azure storage limitations, evidence privacy, and private broker availability. |
 | [Contribution policy](CONTRIBUTING.md) | No external contributions; permission requirements and AI-Broker scope. |
