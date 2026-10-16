@@ -1,6 +1,8 @@
 # DRA 2.0 POC Demo App
 
-A containerized task-management demo with DRA 2.0 AI-Broker integration for pre- and post-deployment evidence review.
+- Containerized task-management demo with pre- and post-deployment AI-Broker evidence review.
+- Proprietary proof of concept, not a production-ready product.
+- Not open to external contributions; see the [contribution policy](docs/CONTRIBUTING.md).
 
 ## What’s inside
 
@@ -9,6 +11,10 @@ A containerized task-management demo with DRA 2.0 AI-Broker integration for pre-
 | Frontend | Authenticated task UI, served by Nginx and Flask; HTMX powers task updates. |
 | Backend | Internal REST API and task validation. |
 | Database | Internal CRUD API with SQLite storage. |
+
+- Only the frontend is publicly exposed; backend and database APIs are internal.
+
+## Application and Release Flow
 
 ```mermaid
 flowchart LR
@@ -61,24 +67,45 @@ flowchart LR
     PostGate -->|ERROR - exit code 30| Failed
 ```
 
-The numbers are broker process exit codes, not severity scores. Exit code `10` (`FAIL`) means findings triggered a policy failure, including approval-level findings in post-deployment mode. Exit code `30` (`ERROR`) means the scan could not complete, for example because of invalid evidence or a provider error. Both block deployment during pre-deployment review and fail verification during post-deployment review; an error never authorizes deployment.
+## Broker Review
 
-Only the frontend is exposed publicly. The separately maintained AI-Broker reviews selected evidence using Gemini or Groq; it does not build or deploy software.
+- AI-Broker is private, maintained separately, and not included in this repository.
+- It reviews selected evidence using Gemini or Groq and maps findings to policy outcomes.
+- Workflows enforce release gates and retain results; the broker does not build, deploy, or modify code.
+- Post-deployment review is a separate invocation, not continuous monitoring or automatic rollback.
+- Findings are model-generated recommendations, not verified vulnerabilities.
 
-The broker scans evidence and reports policy outcomes; the consuming workflows enforce release gates and retain results. Pre-filter sensitive data before external inference, keep provider credentials in protected CI secrets, and never expose them to untrusted pull requests. Post-deployment review requires a separate invocation; it is not continuous monitoring and does not trigger rollback. Model findings are recommendations, not verified vulnerabilities.
+### Outcomes
+
+- Numbers are broker process exit codes, not severity scores.
+- `PASS` (`0`): broker check passes; all other required checks must also pass.
+- `APPROVAL_REQUIRED` (`20`): pre-deployment review requires an enabled, protected approval gate and human approval.
+- `FAIL` (`10`): findings trigger a policy failure, including approval-level findings in post-deployment mode.
+- `ERROR` (`30`): the scan could not complete, for example due to invalid evidence or a provider error.
+- `FAIL` and `ERROR` block release or fail post-deployment verification; errors never authorize deployment.
+
+## Operation and Limits
+
+- Use the [usage guide](docs/USAGE.MD) for local execution and Azure script entry points.
+- Manually dispatch the release workflow; automatic runs on pushes to `main` are disabled.
+- Deploy reviewed, immutable image digests without rebuilding; the deployment script alone does not enforce review gates.
+- Pin the private broker image to an approved GHCR digest.
+- Pre-filter sensitive evidence before external inference; redaction is best-effort.
+- Keep credentials in protected CI secrets and never expose them to untrusted pull requests.
+- Azure SQLite storage is not configured for persistence; container restarts or replacement may lose data.
 
 ## Documentation
 
 - [Documentation index](docs/index.MD)
-- [Usage and setup](docs/USAGE.MD)
+- [Usage and script reference](docs/USAGE.MD)
 - [Contribution policy](docs/CONTRIBUTING.md)
 - [Glossary](docs/glossary.md)
 
-This is a proof of concept, not a production deployment, and is not open to external contributions. See the usage guide for storage and evidence-privacy limitations.
-
 ## License
 
-This repository is publicly visible, but its [proprietary license](LICENSE) grants no reuse permission. Third-party packages remain subject to their own licenses.
+- Public visibility grants no reuse permission; see the [proprietary license](LICENSE).
+- Execution, testing, and deployment require prior written permission.
+- Third-party packages remain subject to their own licenses.
 
 ---
 
