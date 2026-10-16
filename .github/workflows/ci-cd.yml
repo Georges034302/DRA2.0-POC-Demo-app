@@ -1,7 +1,7 @@
 name: DRA 2.0 CI/CD
 on:
-  push:
-    branches: [main]
+  # push:
+  #   branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

@@ -1,8 +1,8 @@
 name: DRA 2.0 Post-Deployment
 on:
-  workflow_run:
-    workflows: ['DRA 2.0 CI/CD']
-    types: [completed]
+  # workflow_run:
+  #   workflows: ['DRA 2.0 CI/CD']
+  #   types: [completed]
   workflow_dispatch:
 permissions:
   contents: read
