@@ -1,6 +1,9 @@
 .env
 .env.*
 !.env.example
+.vscode/
+vscode/
+vscode/*
 __pycache__/
 *.py[cod]
 .pytest_cache/
