@@ -33,7 +33,7 @@ flowchart LR
     end
 
     subgraph Broker[AI-Broker container - pinned approved GHCR digest]
-        Input[Validate JSON request and explicitly listed evidence<br/>Relative UTF-8 files: 128 KiB each, 384 KiB total]
+        Input[Validate JSON request and explicitly listed evidence<br/>Check relative paths, UTF-8 text and size limits]
         Scan[Best-effort redaction<br/>Gemini or Groq evidence analysis]
         Policy[Deterministic policy evaluation<br/>Default: critical/high fail, medium needs approval<br/>Medium fails in post_deploy mode]
         Result[JSON result and exit code<br/>Outcome, summary, findings, policy version, metrics]
@@ -45,9 +45,10 @@ flowchart LR
     Build --> Pre --> Input
     Result --> Mode{Request mode}
     Mode -->|pre_deploy| PreGate
-    PreGate -->|PASS: 0| Checks
-    PreGate -->|APPROVAL_REQUIRED: 20| Approval
-    PreGate -->|FAIL: 10 or ERROR: 30| Block
+    PreGate -->|PASS - exit code 0| Checks
+    PreGate -->|APPROVAL_REQUIRED - exit code 20| Approval
+    PreGate -->|FAIL - exit code 10| Block
+    PreGate -->|ERROR - exit code 30| Block
     Approval -->|Approved and gate enabled| Checks
     Approval -->|Rejected or gate disabled| Block
     Checks -->|Yes| Deploy
@@ -55,9 +56,12 @@ flowchart LR
     Deploy -.-> Runtime
     Deploy --> Post --> Input
     Mode -->|post_deploy| PostGate
-    PostGate -->|PASS: 0| Verified
-    PostGate -->|FAIL: 10 or ERROR: 30| Failed
+    PostGate -->|PASS - exit code 0| Verified
+    PostGate -->|FAIL - exit code 10| Failed
+    PostGate -->|ERROR - exit code 30| Failed
 ```
+
+The numbers are broker process exit codes, not severity scores. Exit code `10` (`FAIL`) means findings triggered a policy failure, including approval-level findings in post-deployment mode. Exit code `30` (`ERROR`) means the scan could not complete, for example because of invalid evidence or a provider error. Both block deployment during pre-deployment review and fail verification during post-deployment review; an error never authorizes deployment.
 
 Only the frontend is exposed publicly. The separately maintained AI-Broker reviews selected evidence using Gemini or Groq; it does not build or deploy software.
 
