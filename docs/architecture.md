@@ -300,67 +300,26 @@ Post-deployment policies are stricter (treat MEDIUM findings as FAIL instead of 
 
 ```
 DRA2.0-POC-Demo-app/
-│
-├── frontend/                      # Nginx reverse proxy container
-│   ├── Dockerfile                # Alpine Nginx image
-│   ├── nginx.conf                # Reverse proxy config, security headers, caching
-│   ├── static/                   # Static assets (served by Nginx)
-│   │   ├── css/
-│   │   │   └── style.css         # Modern dark/light theme CSS (17.5 KB)
-│   │   └── js/
-│   │       └── app.js            # HTMX, theme toggle, modal management (9.7 KB)
-│   └── templates/                # Jinja2 templates (served by Flask, cached)
-│       ├── base.html             # Master template with header, sidebar
-│       ├── login.html            # Authentication page
-│       ├── dashboard.html        # Task manager interface
-│       ├── task_list.html        # Reusable task list fragment
-│       └── task_form.html        # Edit task modal form
-│
-├── backend/                       # Flask API container
-│   ├── Dockerfile                # Python 3.12 + gunicorn
-│   ├── app.py                    # Flask routes, auth, CRUD endpoints (170 lines)
-│   ├── models.py                 # SQLAlchemy Task model, db initialization
-│   ├── requirements.txt           # Flask, SQLAlchemy, gunicorn
-│   └── __pycache__/              # Python bytecode (gitignored)
-│
+├── frontend/                      # Nginx reverse proxy + static assets + templates
+├── backend/                       # Flask API + SQLAlchemy ORM + SQLite
 ├── database/                      # Database placeholder (future PostgreSQL)
-│   └── .gitkeep                  # Placeholder for external DB setup
-│
-├── docs/                          # Documentation hub
-│   ├── index.MD                  # Navigation and quick links
-│   ├── architecture.md           # This file (system design, components, governance)
-│   ├── broker.md                 # Broker policy reference
-│   ├── DEVELOPMENT.md            # Phase breakdown and roadmap
-│   ├── operations.md             # Deployment, security, troubleshooting
-│   ├── USAGE.MD                  # Getting started, local setup
-│   └── glossary.md               # Terminology reference
-│
-├── scripts/                       # Automation scripts (future use)
-│   ├── setup.sh                  # Environment provisioning
-│   ├── build.sh                  # Docker image builds
-│   ├── review.sh                 # Evidence collection, Broker invocation
-│   ├── deploy.sh                 # Immutable deployment by digest
-│   └── post-deploy.sh            # Post-deployment verification
-│
-├── .github/
-│   └── workflows/                # GitHub Actions automation
-│       ├── ci-cd.yml             # Build → Test → Publish → Broker → Deploy
-│       └── post-deployment.yml   # Runtime verification, stricter policy
-│
-├── docker-compose.yml            # 3-container orchestration
-├── README.md                      # Project overview, quick start
-├── LICENSE                        # Proprietary license
+├── docs/                          # Documentation hub (architecture, guides, reference)
+├── scripts/                       # Automation scripts (setup, build, deploy, verify)
+├── .github/                       # GitHub Actions workflows (CI/CD, post-deploy)
+├── docker-compose.yml            # 3-container orchestration config
+├── README.md                      # Project overview and quick start
+├── LICENSE                        # Proprietary license terms
 ├── .env.example                   # Environment variables template
 ├── .gitignore                     # Git exclusions
-└── .git/                          # Git repository
+└── .git/                          # Git repository history
 ```
 
-**Directory Summary:**
-- **frontend/**: Nginx + Static assets (CSS, JS) + Templates (~30 KB total)
-- **backend/**: Flask API + SQLite ORM + CRUD logic (~200 lines)
-- **docs/**: Complete documentation (guides, reference, governance flow)
-- **scripts/**: CI/CD automation (future phases)
-- **.github/workflows/**: GitHub Actions pipelines (future phases)
+**Key Directories:**
+- **frontend/**: Nginx (Dockerfile, nginx.conf) + static/ (css, js) + templates/ (HTML)
+- **backend/**: Flask app (app.py, models.py) + requirements.txt + Dockerfile
+- **docs/**: architecture.md, DEVELOPMENT.md, broker.md, operations.md, USAGE.MD, glossary.md, index.MD
+- **scripts/**: setup.sh, build.sh, review.sh, deploy.sh, post-deploy.sh (future phases)
+- **.github/workflows/**: ci-cd.yml, post-deployment.yml (future phases)
 
 ## Integration Points
 
