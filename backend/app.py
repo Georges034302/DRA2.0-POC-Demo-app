@@ -28,10 +28,9 @@ def login_required(f):
     return decorated_function
 
 
-@app.before_request
-def create_tables():
-    with app.app_context():
-        db.create_all()
+# Initialize database once at startup
+with app.app_context():
+    db.create_all()
 
 
 @app.route('/health', methods=['GET'])
