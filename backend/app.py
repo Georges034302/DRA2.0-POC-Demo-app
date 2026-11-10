@@ -1,190 +1,137 @@
-from flask import Flask, render_template, request, session, jsonify, redirect, url_for, flash
-from functools import wraps
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from models import db, Task
 import os
-import json
 from datetime import datetime
-from models import db, Task, init_db
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-prod')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///tasks.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/tasks.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
+CORS(app)
 
-# Demo credentials
-DEMO_USERNAME = os.getenv('DEMO_USERNAME', 'user')
-DEMO_PASSWORD = os.getenv('DEMO_PASSWORD', 'password')
-
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            if request.headers.get('Accept') == 'application/json':
-                return jsonify(error='Unauthorized'), 401
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-# Initialize database once at startup
 with app.app_context():
     db.create_all()
 
 
-@app.route('/health', methods=['GET'])
-def health():
-    """Health check endpoint"""
-    return jsonify(service='backend', status='ok', database='connected')
-
-
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/api/auth/login', methods=['POST'])
 def login():
-    """Handle login"""
-    if request.method == 'POST':
-        username = request.form.get('username', '')
-        password = request.form.get('password', '')
-        
-        if username == DEMO_USERNAME and password == DEMO_PASSWORD:
-            session['user_id'] = 1
-            session['username'] = username
-            flash('Logged in successfully', 'success')
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Invalid credentials', 'error')
+    """Authenticate user and return token."""
+    data = request.get_json()
+    username = data.get('username', '')
+    password = data.get('password', '')
     
-    return render_template('login.html')
+    if username and password:
+        return jsonify({'status': 'success', 'message': 'Logged in', 'token': 'mock-token'}), 200
+    return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
 
 
-@app.route('/logout', methods=['POST'])
-@login_required
+@app.route('/api/auth/logout', methods=['POST'])
 def logout():
-    """Handle logout"""
-    session.clear()
-    flash('Logged out successfully', 'success')
-    return redirect(url_for('login'))
-
-
-@app.route('/', methods=['GET'])
-@login_required
-def dashboard():
-    """Dashboard page"""
-    return render_template('dashboard.html')
+    """Logout user."""
+    return jsonify({'status': 'success', 'message': 'Logged out'}), 200
 
 
 @app.route('/api/tasks', methods=['GET'])
-@login_required
-def list_tasks():
-    """List all tasks, optionally filtered by status"""
-    status = request.args.get('status', '')
-    query = Task.query
-    
-    if status:
-        query = query.filter_by(status=status)
-    
-    tasks = query.order_by(Task.created_at.desc()).all()
-    
-    if request.headers.get('HX-Request'):
-        return render_template('task_list.html', tasks=tasks)
-    
-    return jsonify([task.to_dict() for task in tasks])
+def get_tasks():
+    """Retrieve all tasks."""
+    tasks = Task.query.all()
+    return jsonify([{
+        'id': t.id,
+        'title': t.title,
+        'description': t.description,
+        'status': t.status,
+        'created_at': t.created_at.isoformat(),
+        'updated_at': t.updated_at.isoformat()
+    } for t in tasks]), 200
 
 
 @app.route('/api/tasks', methods=['POST'])
-@login_required
 def create_task():
-    """Create a new task"""
-    data = request.get_json() or request.form.to_dict()
-    
-    title = data.get('title', '').strip()
-    description = data.get('description', '').strip()
-    status = data.get('status', 'pending')
-    
-    if not title:
-        return jsonify(error='Title is required'), 400
-    
-    if len(title) > 200:
-        return jsonify(error='Title too long'), 400
-    
-    if status not in ['pending', 'in_progress', 'completed']:
-        return jsonify(error='Invalid status'), 400
-    
-    task = Task(title=title, description=description, status=status)
+    """Create a new task."""
+    data = request.get_json()
+    task = Task(
+        title=data.get('title', 'Untitled'),
+        description=data.get('description', ''),
+        status='pending'
+    )
     db.session.add(task)
     db.session.commit()
     
-    return jsonify(task.to_dict()), 201
+    return jsonify({
+        'id': task.id,
+        'title': task.title,
+        'description': task.description,
+        'status': task.status,
+        'created_at': task.created_at.isoformat(),
+        'updated_at': task.updated_at.isoformat()
+    }), 201
 
 
 @app.route('/api/tasks/<int:task_id>', methods=['GET'])
-@login_required
 def get_task(task_id):
-    """Get a single task"""
-    task = Task.query.get_or_404(task_id)
-    return jsonify(task.to_dict())
-
-
-@app.route('/api/tasks/<int:task_id>/edit', methods=['GET'])
-@login_required
-def edit_task_form(task_id):
-    """Get edit form for task (HTMX)"""
-    task = Task.query.get_or_404(task_id)
-    return render_template('task_form.html', task=task)
+    """Retrieve a specific task."""
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'status': 'error', 'message': 'Task not found'}), 404
+    
+    return jsonify({
+        'id': task.id,
+        'title': task.title,
+        'description': task.description,
+        'status': task.status,
+        'created_at': task.created_at.isoformat(),
+        'updated_at': task.updated_at.isoformat()
+    }), 200
 
 
 @app.route('/api/tasks/<int:task_id>', methods=['PATCH'])
-@login_required
 def update_task(task_id):
-    """Update a task"""
-    task = Task.query.get_or_404(task_id)
-    data = request.get_json() or request.form.to_dict()
+    """Update a task."""
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'status': 'error', 'message': 'Task not found'}), 404
     
+    data = request.get_json()
     if 'title' in data:
-        title = data['title'].strip()
-        if not title or len(title) > 200:
-            return jsonify(error='Invalid title'), 400
-        task.title = title
-    
+        task.title = data['title']
     if 'description' in data:
-        task.description = data['description'].strip()
-    
+        task.description = data['description']
     if 'status' in data:
-        if data['status'] not in ['pending', 'in_progress', 'completed']:
-            return jsonify(error='Invalid status'), 400
         task.status = data['status']
     
     task.updated_at = datetime.utcnow()
     db.session.commit()
     
-    return jsonify(task.to_dict())
+    return jsonify({
+        'id': task.id,
+        'title': task.title,
+        'description': task.description,
+        'status': task.status,
+        'created_at': task.created_at.isoformat(),
+        'updated_at': task.updated_at.isoformat()
+    }), 200
 
 
 @app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
-@login_required
 def delete_task(task_id):
-    """Delete a task"""
-    task = Task.query.get_or_404(task_id)
+    """Delete a task."""
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'status': 'error', 'message': 'Task not found'}), 404
+    
     db.session.delete(task)
     db.session.commit()
     
     return '', 204
 
 
-@app.errorhandler(404)
-def not_found(e):
-    """404 error handler"""
-    return jsonify(error='Not found'), 404
-
-
-@app.errorhandler(500)
-def server_error(e):
-    """500 error handler"""
-    return jsonify(error='Server error'), 500
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint."""
+    return jsonify({'status': 'healthy'}), 200
 
 
 if __name__ == '__main__':
-    with app.app_context():
-        init_db()
     app.run(host='0.0.0.0', port=5000, debug=False)
-
