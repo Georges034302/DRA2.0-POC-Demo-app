@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - DRA 2.0 POC{% endblock %}
+
+{% block content %}
+<div class="container">
+  <!-- Page Header -->
+  <div class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+      <div>
+        <h1 class="card-title">📋 Task Manager</h1>
+        <p class="card-subtitle">Manage your tasks and track progress</p>
+      </div>
+      <button class="btn-primary" onclick="modalManager.open('createTaskModal')">➕ New Task</button>
+    </div>
+  </div>
+
+  <!-- Filters Section -->
+  <div class="card" style="margin-bottom: 2rem;">
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <div>
+        <label style="display: inline; margin-right: 0.5rem; font-weight: 600;">Status:</label>
+        <select
+          id="statusFilter"
+          name="status"
+          hx-get="/api/tasks"
+          hx-trigger="change"
+          hx-target="#taskList"
+          hx-swap="innerHTML"
+          style="width: 200px;"
+        >
+          <option value="">All Tasks</option>
+          <option value="pending">Pending</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task List -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Tasks</h2>
+        <p class="card-subtitle" id="taskCount">Loading...</p>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div id="taskList" hx-get="/api/tasks" hx-trigger="load" hx-swap="innerHTML" class="task-list">
+        <div class="loading">
+          <div class="spinner"></div>
+          <span>Loading tasks...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Task Modal -->
+<div id="createTaskModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Create New Task</h2>
+      <button class="modal-close" onclick="modalManager.close('createTaskModal')">&times;</button>
+    </div>
+    <form id="createTaskForm" method="POST" action="/api/tasks" hx-post="/api/tasks" hx-on="htmx:afterRequest: handleCreateTaskResponse(event)">
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="taskTitle">Task Title *</label>
+          <input type="text" id="taskTitle" name="title" placeholder="Enter task title" required />
+        </div>
+
+        <div class="form-group">
+          <label for="taskDescription">Description</label>
+          <textarea id="taskDescription" name="description" placeholder="Enter task description"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="taskStatus">Status *</label>
+          <select id="taskStatus" name="status" required>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="modalManager.close('createTaskModal')">Cancel</button>
+        <button type="submit" class="btn-primary">Create Task</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Task Modal -->
+<div id="editTaskModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Edit Task</h2>
+      <button class="modal-close" onclick="modalManager.close('editTaskModal')">&times;</button>
+    </div>
+    <div id="editTaskForm" class="modal-body">
+      <!-- Form content loaded via HTMX -->
+    </div>
+  </div>
+</div>
+
+<script>
+  function handleCreateTaskResponse(event) {
+    if (event.detail.xhr.status === 201) {
+      showAlert("Task created successfully", "success");
+      modalManager.close("createTaskModal");
+      document.getElementById("createTaskForm").reset();
+      // Reload task list
+      htmx.ajax("GET", "/api/tasks", { target: "#taskList", swap: "innerHTML" });
+    } else {
+      showAlert("Failed to create task", "error");
+    }
+  }
+
+  // Initialize task handlers
+  document.addEventListener("DOMContentLoaded", () => {
+    initializeTaskHandlers();
+  });
+</script>
+{% endblock %}

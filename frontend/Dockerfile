@@ -1,13 +1,26 @@
-FROM python:3.12-slim
-WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends nginx && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-COPY templates/ templates/
-COPY static/ static/
+FROM nginx:alpine
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Remove default nginx config
+RUN rm /etc/nginx/nginx.conf
+
+# Copy custom nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
-ENV PYTHONUNBUFFERED=1
-EXPOSE 8080
-# The same container hosts Nginx and Gunicorn. Terminate both on exit.
-CMD ["/bin/sh","-c","gunicorn -w 2 -b 127.0.0.1:8000 app:app & pid=$!; trap 'kill $pid 2>/dev/null || true' TERM INT EXIT; nginx -g 'daemon off;' & nginxpid=$!; wait $nginxpid; kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true"]
+
+# Copy static files
+COPY static /app/static
+
+# Copy templates (for serving if needed)
+COPY templates /app/templates
+
+# Expose port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Run nginx
+CMD ["nginx", "-g", "daemon off;"]
