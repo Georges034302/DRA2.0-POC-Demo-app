@@ -11,8 +11,9 @@ Complete reference for the DRA 2.0 POC Demo Application.
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | **[README](../README.md)** | Project overview, quick start, at-a-glance architecture | Everyone |
+| **[Development Guide](DEVELOPMENT.md)** | Implementation phases, success criteria, development roadmap | Developers, engineers |
 | **[Architecture](architecture.md)** | Complete release governance flow, broker integration, exit codes | Engineers, architects |
-| **[AI-Broker Reference](broker.md)** | Policy evaluation, review modes, result format, redaction | Operators, reviewers |
+| **[Broker Reference](broker.md)** | Policy evaluation, review modes, result format, redaction | Operators, reviewers |
 | **[Operations](operations.md)** | Azure deployment, security, troubleshooting, performance | DevOps, operators |
 | **[Getting Started](USAGE.MD)** | Local setup, Docker Compose, Azure scripts, validation | Developers |
 | **[Glossary](glossary.md)** | Terminology and definitions | Reference |
@@ -30,9 +31,10 @@ Complete reference for the DRA 2.0 POC Demo Application.
 ### Understanding the System
 
 - **How release governance works:** [Architecture](architecture.md)
-- **What AI-Broker does:** [AI-Broker Reference](broker.md)
-- **Pre/Post-deployment review:** [AI-Broker > Review Modes](broker.md#review-modes)
-- **Policy outcomes:** [AI-Broker > Exit Codes](broker.md#exit-codes--outcomes)
+- **What the Broker does:** [Broker Reference](broker.md)
+- **Pre/Post-deployment review:** [Broker > Review Modes](broker.md#review-modes)
+- **Policy outcomes:** [Broker > Exit Codes](broker.md#exit-codes--outcomes)
+- **Development roadmap:** [Development Guide](DEVELOPMENT.md)
 
 ### Deployment & Operations
 
@@ -51,9 +53,9 @@ Complete reference for the DRA 2.0 POC Demo Application.
 
 ## Key Concepts
 
-**Release Governance:** Automated policy-driven release gates using AI-Broker evidence review and human-controlled approvals.
+**Release Governance:** Automated policy-driven release gates using Broker evidence review and human-controlled approvals.
 
-**AI-Broker:** External policy engine that analyzes code and deployment evidence, returning deterministic outcomes (PASS/FAIL/APPROVAL_REQUIRED/ERROR).
+**Broker:** External policy engine that analyzes code and deployment evidence, returning deterministic outcomes (PASS/FAIL/APPROVAL_REQUIRED/ERROR).
 
 **Immutable Digests:** Application images are reviewed by SHA256 digest and deployed without rebuilding.
 
