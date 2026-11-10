@@ -6,8 +6,8 @@ RUN apk add --no-cache curl
 # Remove default nginx config
 RUN rm /etc/nginx/nginx.conf
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy custom nginx config (will be processed by envsubst)
+COPY nginx.conf /etc/nginx/nginx.conf.template
 
 # Copy static files
 COPY static /app/static
@@ -22,5 +22,5 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/health || exit 1
 
-# Run nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Entrypoint to process envsubst and run nginx
+CMD sh -c 'envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g "daemon off;"'
