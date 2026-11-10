@@ -5,12 +5,9 @@ services:
   frontend:
     build: ./frontend
     container_name: dra-frontend
-    ports:
-      - "80:80"
+    network_mode: host
     depends_on:
       - backend
-    networks:
-      - dra-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 10s
@@ -21,6 +18,7 @@ services:
   backend:
     build: ./backend
     container_name: dra-backend
+    network_mode: host
     environment:
       FLASK_ENV: production
       PYTHONUNBUFFERED: 1
@@ -30,10 +28,6 @@ services:
       DEMO_PASSWORD: ${DEMO_PASSWORD:-password}
     volumes:
       - sqlite_data:/data
-    networks:
-      - dra-network
-    expose:
-      - "5000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 10s
@@ -45,8 +39,6 @@ services:
     image: alpine:latest
     container_name: dra-database
     command: /bin/sh -c "echo 'Database placeholder - using SQLite in backend'"
-    networks:
-      - dra-network
 
 networks:
   dra-network:
