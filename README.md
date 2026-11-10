@@ -18,45 +18,71 @@ An external, independently maintained policy engine that:
 
 ## How It Works
 
-```
-Build Phase          Review Phase              Deployment Phase
-─────────────────    ──────────────────       ──────────────────
-Test & build    →    Pre-filter evidence  →   AI-Broker analyzes  →  Gate decision
-Publish digest       (redact secrets)          (Gemini/Groq)         (PASS/FAIL/APPROVAL)
-                                                                      ↓
-                                              Human approval  →  Deploy reviewed digests
-                                              (if required)        (immutable, no rebuild)
-                                                                   ↓
-                                              Post-deploy verification
-                                              (separate invocation)
+```mermaid
+flowchart LR
+    A["<b>Build</b><br/>Test & Build<br/>Publish Digest"] 
+    B["<b>Prepare Evidence</b><br/>Pre-filter Code<br/>Redact Secrets"]
+    C["<b>AI-Broker Review</b><br/>Analyze Evidence<br/>Gemini or Groq"]
+    D{{"<b>Gate Decision</b><br/>PASS/FAIL/APPROVAL"}}
+    E["<b>Human Approval</b><br/>If Required<br/>Protected Environment"]
+    F["<b>Deploy</b><br/>Reviewed Digests<br/>No Rebuild"]
+    G["<b>Post-Deploy Verify</b><br/>Collect Logs<br/>Re-scan Evidence"]
+    
+    A -->|Build Complete| B
+    B -->|Evidence Ready| C
+    C -->|Policy Applied| D
+    D -->|PASS| F
+    D -->|APPROVAL_REQUIRED| E
+    E -->|Approved| F
+    D -->|FAIL/ERROR| H["<b>Block</b><br/>Release Blocked"]
+    F -->|Deployed| G
+    
+    style A fill:#4A90E2,stroke:#2E5C8A,color:#fff,stroke-width:3px
+    style B fill:#7B68EE,stroke:#4D3FA3,color:#fff,stroke-width:3px
+    style C fill:#FF6B6B,stroke:#CC5555,color:#fff,stroke-width:3px
+    style D fill:#FFA500,stroke:#CC8400,color:#fff,stroke-width:3px
+    style E fill:#FFA500,stroke:#CC8400,color:#fff,stroke-width:3px
+    style F fill:#2ECC71,stroke:#238B5C,color:#fff,stroke-width:3px
+    style G fill:#2ECC71,stroke:#238B5C,color:#fff,stroke-width:3px
+    style H fill:#E74C3C,stroke:#A93226,color:#fff,stroke-width:3px
 ```
 
 ## Architecture
 
+```mermaid
+graph LR
+    subgraph Runtime["<b>🏃 Runtime Application</b>"]
+        Browser["<b>Browser</b><br/>User Access"]
+        Frontend["<b>Frontend</b><br/>Nginx + Flask<br/>HTMX"]
+        Backend["<b>Backend</b><br/>Flask REST API"]
+        Database["<b>Database</b><br/>SQLite + CRUD"]
+        Browser -->|HTTPS| Frontend
+        Frontend -->|Internal| Backend
+        Backend -->|Internal| Database
+    end
+    
+    subgraph Governance["<b>⚙️ CI/CD Governance</b>"]
+        Build["<b>Build</b><br/>Test, Publish<br/>Digests"]
+        Broker["<b>AI-Broker</b><br/>Evidence Review<br/>Policy Engine"]
+        Gate["<b>Gate</b><br/>PASS/FAIL<br/>APPROVAL"]
+        Build -->|Evidence| Broker
+        Broker -->|Decision| Gate
+    end
+    
+    Governance -->|Deploy| Runtime
+    
+    style Runtime fill:#E8F4F8,stroke:#2E7D99,stroke-width:2px,color:#000
+    style Governance fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000
+    style Browser fill:#4A90E2,stroke:#2E5C8A,color:#fff,stroke-width:2px
+    style Frontend fill:#7B68EE,stroke:#4D3FA3,color:#fff,stroke-width:2px
+    style Backend fill:#7B68EE,stroke:#4D3FA3,color:#fff,stroke-width:2px
+    style Database fill:#7B68EE,stroke:#4D3FA3,color:#fff,stroke-width:2px
+    style Build fill:#FF6B6B,stroke:#CC5555,color:#fff,stroke-width:2px
+    style Broker fill:#FF6B6B,stroke:#CC5555,color:#fff,stroke-width:2px
+    style Gate fill:#FFA500,stroke:#CC8400,color:#fff,stroke-width:2px
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Runtime (Application)                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐    │
-│  │   Browser   │→ │  Frontend   │→ │   Backend    │→ DB │
-│  │ (Public)    │  │ (Nginx/Flask)  │ (Flask API) │    │
-│  └─────────────┘  └─────────────┘  └──────────────┘    │
-└─────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────┐
-│  CI/CD Pipeline                                         │
-│  Build → Evidence → AI-Broker → Gate → Deploy → Verify  │
-└─────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────┐
-│  AI-Broker (External Service)                           │
-│  • Validates input (JSON, paths, UTF-8, sizes)          │
-│  • Redacts sensitive data (best-effort)                 │
-│  • Analyzes evidence (Gemini or Groq)                   │
-│  • Evaluates policy → exit code (0/10/20/30)            │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Key Design:** Only frontend is public; backend and database are internal. Broker is invoked during CI/CD, not runtime.
+**Key Design:** Only frontend is public (HTTPS). Backend and database are internal. AI-Broker is external, invoked during CI/CD only.
 
 ## Quick Start
 
