@@ -1,128 +1,198 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - DRA 2.0 POC</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  </head>
 
-{% block title %}Dashboard - DRA 2.0 POC{% endblock %}
+  <body>
+    <div id="alertContainer" style="position: fixed; top: 20px; right: 20px; z-index: 2000;"></div>
 
-{% block content %}
-<div class="container">
-  <!-- Page Header -->
-  <div class="card" style="margin-bottom: 2rem;">
-    <div class="card-header">
-      <div>
-        <h1 class="card-title">📋 Task Manager</h1>
-        <p class="card-subtitle">Manage your tasks and track progress</p>
-      </div>
-      <button class="btn-primary" onclick="modalManager.open('createTaskModal')">➕ New Task</button>
-    </div>
-  </div>
-
-  <!-- Filters Section -->
-  <div class="card" style="margin-bottom: 2rem;">
-    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-      <div>
-        <label style="display: inline; margin-right: 0.5rem; font-weight: 600;">Status:</label>
-        <select
-          id="statusFilter"
-          name="status"
-          hx-get="/api/tasks"
-          hx-trigger="change"
-          hx-target="#taskList"
-          hx-swap="innerHTML"
-          style="width: 200px;"
-        >
-          <option value="">All Tasks</option>
-          <option value="pending">Pending</option>
-          <option value="in_progress">In Progress</option>
-          <option value="completed">Completed</option>
-        </select>
-      </div>
-    </div>
-  </div>
-
-  <!-- Task List -->
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <h2 class="card-title">Tasks</h2>
-        <p class="card-subtitle" id="taskCount">Loading...</p>
-      </div>
-    </div>
-
-    <div class="card-body">
-      <div id="taskList" hx-get="/api/tasks" hx-trigger="load" hx-swap="innerHTML" class="task-list">
-        <div class="loading">
-          <div class="spinner"></div>
-          <span>Loading tasks...</span>
+    <header style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 1rem;">
+      <div style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center;">
+        <h1 style="margin: 0; color: var(--text-primary);">DRA 2.0 POC</h1>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+          <button id="themeToggle" class="theme-toggle" title="Toggle theme">☀️</button>
+          <button type="button" onclick="logout()" style="padding: 0.5rem 1rem; background: var(--bg-tertiary); border: none; border-radius: 0.25rem; cursor: pointer; color: var(--text-primary);">Logout</button>
         </div>
       </div>
+    </header>
+
+    <div style="max-width: 1200px; margin: 0 auto; padding: 2rem 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h2 style="margin: 0; color: var(--text-primary);">Tasks</h2>
+        <button type="button" onclick="openNewTaskForm()" class="btn-primary">➕ New Task</button>
+      </div>
+
+      <div id="tasksContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+        <p style="color: var(--text-secondary);">Loading tasks...</p>
+      </div>
     </div>
-  </div>
-</div>
 
-<!-- Create Task Modal -->
-<div id="createTaskModal" class="modal-overlay">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 class="modal-title">Create New Task</h2>
-      <button class="modal-close" onclick="modalManager.close('createTaskModal')">&times;</button>
-    </div>
-    <form id="createTaskForm" method="POST" action="/api/tasks" hx-post="/api/tasks" hx-on="htmx:afterRequest: handleCreateTaskResponse(event)">
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="taskTitle">Task Title *</label>
-          <input type="text" id="taskTitle" name="title" placeholder="Enter task title" required />
-        </div>
-
-        <div class="form-group">
-          <label for="taskDescription">Description</label>
-          <textarea id="taskDescription" name="description" placeholder="Enter task description"></textarea>
-        </div>
-
-        <div class="form-group">
-          <label for="taskStatus">Status *</label>
-          <select id="taskStatus" name="status" required>
-            <option value="pending">Pending</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
+    <!-- Modal for Task Editing -->
+    <dialog id="taskModal" class="modal">
+      <div class="modal-content">
+        <button class="modal-close" type="button" onclick="document.getElementById('taskModal').close()">✕</button>
+        <form id="taskForm" class="edit-form" onsubmit="saveTask(event)">
+          <input type="hidden" id="taskId" />
+          <input type="text" id="taskTitle" name="title" placeholder="Task title" required maxlength="120" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: 0.25rem; background: var(--bg-primary); color: var(--text-primary);" />
+          <textarea id="taskDesc" name="description" placeholder="Task description" maxlength="2000" rows="3" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: 0.25rem; background: var(--bg-primary); color: var(--text-primary); font-family: inherit;"></textarea>
+          <select id="taskPriority" name="priority" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: 0.25rem; background: var(--bg-primary); color: var(--text-primary);">
+            <option value="low">Low Priority</option>
+            <option value="medium" selected>Medium Priority</option>
+            <option value="high">High Priority</option>
           </select>
-        </div>
+          <select id="taskStatus" name="status" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: 0.25rem; background: var(--bg-primary); color: var(--text-primary);">
+            <option value="todo">To do</option>
+            <option value="in_progress">In progress</option>
+            <option value="done">Done</option>
+          </select>
+          <button type="submit" class="btn-primary">Save changes</button>
+        </form>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn-secondary" onclick="modalManager.close('createTaskModal')">Cancel</button>
-        <button type="submit" class="btn-primary">Create Task</button>
-      </div>
-    </form>
-  </div>
-</div>
+    </dialog>
 
-<!-- Edit Task Modal -->
-<div id="editTaskModal" class="modal-overlay">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 class="modal-title">Edit Task</h2>
-      <button class="modal-close" onclick="modalManager.close('editTaskModal')">&times;</button>
-    </div>
-    <div id="editTaskForm" class="modal-body">
-      <!-- Form content loaded via HTMX -->
-    </div>
-  </div>
-</div>
+    <script src="/static/js/app.js"></script>
+    <script>
+      async function loadTasks() {
+        try {
+          const token = localStorage.getItem('auth_token');
+          const response = await fetch('/api/tasks', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!response.ok) throw new Error('Failed to load tasks');
+          const tasks = await response.json();
+          renderTasks(tasks);
+        } catch (error) {
+          console.error('Error loading tasks:', error);
+          document.getElementById('tasksContainer').innerHTML = '<p style="color: var(--text-secondary);">Error loading tasks</p>';
+        }
+      }
 
-<script>
-  function handleCreateTaskResponse(event) {
-    if (event.detail.xhr.status === 201) {
-      showAlert("Task created successfully", "success");
-      modalManager.close("createTaskModal");
-      document.getElementById("createTaskForm").reset();
-      // Reload task list
-      htmx.ajax("GET", "/api/tasks", { target: "#taskList", swap: "innerHTML" });
-    } else {
-      showAlert("Failed to create task", "error");
-    }
-  }
+      function renderTasks(tasks) {
+        const container = document.getElementById('tasksContainer');
+        if (tasks.length === 0) {
+          container.innerHTML = '<p style="color: var(--text-secondary);">No tasks yet. Create one to get started!</p>';
+          return;
+        }
+        container.innerHTML = tasks.map(task => `
+          <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 0.5rem; border-left: 4px solid ${getPriorityColor(task.priority)};">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+              <h3 style="margin: 0; color: var(--text-primary);">${escapeHtml(task.title)}</h3>
+              <span style="background: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);">${task.status}</span>
+            </div>
+            <p style="margin: 0 0 1rem 0; color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(task.description)}</p>
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="button" onclick="editTask(${task.id})" style="padding: 0.5rem 1rem; background: var(--bg-tertiary); border: none; border-radius: 0.25rem; cursor: pointer; color: var(--text-primary); font-size: 0.9rem;">Edit</button>
+              <button type="button" onclick="deleteTask(${task.id})" style="padding: 0.5rem 1rem; background: rgba(255,0,0,0.2); border: none; border-radius: 0.25rem; cursor: pointer; color: #ff6b6b; font-size: 0.9rem;">Delete</button>
+            </div>
+          </div>
+        `).join('');
+      }
 
-  // Initialize task handlers
-  document.addEventListener("DOMContentLoaded", () => {
-    initializeTaskHandlers();
-  });
-</script>
-{% endblock %}
+      function getPriorityColor(priority) {
+        const colors = { low: '#4ade80', medium: '#f59e0b', high: '#ef4444' };
+        return colors[priority] || '#888';
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function openNewTaskForm() {
+        document.getElementById('taskId').value = '';
+        document.getElementById('taskTitle').value = '';
+        document.getElementById('taskDesc').value = '';
+        document.getElementById('taskPriority').value = 'medium';
+        document.getElementById('taskStatus').value = 'todo';
+        document.getElementById('taskModal').showModal();
+      }
+
+      async function editTask(id) {
+        try {
+          const token = localStorage.getItem('auth_token');
+          const response = await fetch(`/api/tasks/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!response.ok) throw new Error('Failed to load task');
+          const task = await response.json();
+          document.getElementById('taskId').value = task.id;
+          document.getElementById('taskTitle').value = task.title;
+          document.getElementById('taskDesc').value = task.description;
+          document.getElementById('taskPriority').value = task.priority;
+          document.getElementById('taskStatus').value = task.status;
+          document.getElementById('taskModal').showModal();
+        } catch (error) {
+          console.error('Error loading task:', error);
+          alert('Failed to load task');
+        }
+      }
+
+      async function saveTask(event) {
+        event.preventDefault();
+        const id = document.getElementById('taskId').value;
+        const taskData = {
+          title: document.getElementById('taskTitle').value,
+          description: document.getElementById('taskDesc').value,
+          priority: document.getElementById('taskPriority').value,
+          status: document.getElementById('taskStatus').value
+        };
+
+        try {
+          const token = localStorage.getItem('auth_token');
+          const method = id ? 'PUT' : 'POST';
+          const url = id ? `/api/tasks/${id}` : '/api/tasks';
+          
+          const response = await fetch(url, {
+            method,
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(taskData)
+          });
+          
+          if (!response.ok) throw new Error('Failed to save task');
+          document.getElementById('taskModal').close();
+          loadTasks();
+        } catch (error) {
+          console.error('Error saving task:', error);
+          alert('Failed to save task');
+        }
+      }
+
+      async function deleteTask(id) {
+        if (!confirm('Delete this task?')) return;
+        try {
+          const token = localStorage.getItem('auth_token');
+          const response = await fetch(`/api/tasks/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!response.ok) throw new Error('Failed to delete task');
+          loadTasks();
+        } catch (error) {
+          console.error('Error deleting task:', error);
+          alert('Failed to delete task');
+        }
+      }
+
+      function logout() {
+        localStorage.removeItem('auth_token');
+        window.location.href = '/login.html';
+      }
+
+      // Load tasks on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        const token = localStorage.getItem('auth_token');
+        if (!token) window.location.href = '/login.html';
+        loadTasks();
+      });
+    </script>
+  </body>
+</html>
