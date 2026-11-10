@@ -1,274 +1,277 @@
-# DRA 2.0 POC - Development Guide
+# Development Guide — Release Governance POC
 
-## Project Vision
+## Focus: Governance Pipeline, Not Application Features
 
-**Goal:** Demonstrate how a real application integrates with AI-Broker for AI-driven release governance.
+This POC proves that a broker-based policy engine can control deployments through:
+1. Evidence collection from builds
+2. Policy-based review decisions
+3. Human approval gates
+4. Immutable deployment (reviewed digests only)
+5. Post-deployment verification
 
-**What It Is:**
-- A working task management system (CRUD operations)
-- Multi-tier architecture (Frontend, Backend, Database)
-- Complete CI/CD pipeline with evidence review and approval gates
-- Proof that AI-driven governance + human control works together
+**The application is intentionally minimal.** All effort goes to the governance pipeline.
 
-**What It's NOT:**
-- Not production-ready
-- Not a complex business application
-- Not meant for continuous monitoring or auto-rollback
-- Not enterprise-scale
+## What We're Building
 
-## Application Features
+### The Application (20% effort)
+A minimal task tracker:
+- Simple SQLite schema (tasks table)
+- Basic Flask REST API (create, list, delete)
+- Plain HTML form (no fancy UI)
+- Demo authentication (credentials from .env)
+- Enough to have something real to deploy
 
-### User-Facing Features
-- **Authentication:** Login with demo credentials from `.env`
-- **Task Management:** Create, read, update, delete tasks
-- **Real-Time Updates:** HTMX-powered live updates without page reloads
-- **Persistent Storage:** SQLite database
+### The Governance Pipeline (80% effort)
+- Build automation (test, build, publish images with digests)
+- Evidence collection (code, dependencies, logs)
+- Broker integration (policy review, decisions)
+- Approval gates (human decision routing)
+- Immutable deployment (digest-based, no rebuilds)
+- Post-deployment verification (state check, stricter policy)
 
-### Technical Architecture
-```
-Public:    Browser → Frontend (Nginx + Flask on port 8080)
-Internal:                  ↓
-                        Backend (Flask REST API)
-                          ↓
-                    Database (SQLite)
-```
+## Development Phases
 
-### REST API Endpoints
-```
-POST   /api/tasks          Create task
-GET    /api/tasks          List all tasks
-GET    /api/tasks/:id      Get task by ID
-PUT    /api/tasks/:id      Update task
-DELETE /api/tasks/:id      Delete task
-GET    /health             Health check
-```
+### Phase 1: Minimal App (3-4 days)
+Create a simple, working application:
+- Database: Task model (id, title, status)
+- API: GET /tasks, POST /tasks, DELETE /tasks/:id
+- Frontend: HTML form + list view
+- Docker: Dockerfile for each service
+- Local: docker-compose.yml
 
-## Release Governance Flow
+**Deliverable:** App works locally, API responds, tasks can be created/deleted
 
-The POC demonstrates this complete cycle:
+### Phase 2: CI/CD Pipeline (4-5 days)
+Build the governance infrastructure:
+- GitHub Actions workflow (ci-cd.yml)
+- Test stage (pytest)
+- Build stage (docker images)
+- Publish stage (digest tracking)
+- Evidence collection script (review.sh)
+- Deploy script (deploy.sh)
 
-1. **Build** — Tests, lint, build images, publish with digest
-2. **Pre-Deploy Review** — AI-Broker analyzes code evidence
-3. **Gate Decision** — PASS / FAIL / APPROVAL_REQUIRED / ERROR
-4. **Approval** (if needed) — Human review via protected environment
-5. **Deployment** — Deploy reviewed digests (no rebuild)
-6. **Post-Deploy Verify** — AI-Broker re-scan with stricter policy
+**Deliverable:** Pipeline runs, builds images, publishes digests, collects evidence
 
-## Development Roadmap
+### Phase 3: Broker Integration (3-4 days)
+Connect evidence to policy decisions:
+- Broker invocation (mock or real)
+- Policy evaluation (PASS/FAIL/APPROVAL_REQUIRED/ERROR)
+- Evidence formatting (JSON schema)
+- Decision routing (gate decisions)
+- Approval gate setup (GitHub environment)
 
-### Phase 1: Foundation (Week 1)
-- Database schema and migrations
-- Backend Flask app with API structure
-- Frontend Flask app with templates
-- Unit tests for models and API
+**Deliverable:** Broker can be called, decisions are enforced, approvals work
 
-**Deliverable:** App skeleton + API working locally
+### Phase 4: Deployment & Verification (2-3 days)
+Complete the governance flow:
+- Immutable deployment (deploy by digest, no rebuild)
+- Post-deployment workflow (post-deployment.yml)
+- Evidence re-collection
+- Post-deployment broker invocation (stricter policy)
+- Verification reporting
 
-### Phase 2: Features (Week 2)
-- Authentication flow
-- Task CRUD UI with HTMX
-- Complete API implementation
-- Integration tests
+**Deliverable:** Full end-to-end flow works, from build to post-deploy
 
-**Deliverable:** Fully functional task management
-
-### Phase 3: Deployment (Week 3)
-- Dockerfiles for all services
-- docker-compose.yml
-- GitHub Actions CI/CD pipeline
-- Evidence collection scripts (review.sh, deploy.sh, etc.)
-
-**Deliverable:** docker-compose up fully working
-
-### Phase 4: Quality (Week 4)
-- Unit test suite (80%+ coverage)
-- Integration tests
-- Linting (flake8)
-- Security scanning (Bandit)
-
-**Deliverable:** All quality gates passing
-
-### Phase 5: Integration (Week 5)
-- AI-Broker integration stubs
-- Monitoring and observability
-- Final documentation
+### Phase 5: Polish & Documentation (2-3 days)
+Finalize for demo:
+- Tests and quality gates
+- Error handling
+- Documentation updates
+- Troubleshooting guide
 - Demo readiness
 
-**Deliverable:** Full end-to-end governance demo
+**Deliverable:** Ready to demo the governance pipeline
 
 ## Technology Stack
 
-**Frontend:**
+**Application:**
+- Flask (Python 3.12+)
+- SQLite
 - Nginx (reverse proxy)
-- Flask (web framework)
-- HTMX 2.0.4 (real-time updates from CDN)
-- HTML5 + CSS3 (responsive design)
+- Plain HTML (no framework)
 
-**Backend:**
-- Flask (REST API)
-- Python 3.12+
-- SQLAlchemy (ORM) or sqlite3
-- Pydantic (validation)
+**Governance:**
+- GitHub Actions
+- Docker & Docker Compose
+- Bash scripts
+- Broker API (external service)
 
 **Testing:**
-- pytest (unit & integration tests)
-- flake8 (linting)
+- pytest
+- flake8
 - Bandit (security)
 
-**DevOps:**
-- Docker & Docker Compose
-- GitHub Actions (CI/CD)
-- Bash scripting (automation)
-- Azure Container Apps (deployment target)
+## Application Structure
+
+```
+frontend/
+  ├─ Dockerfile
+  ├─ requirements.txt (Flask, Jinja2)
+  ├─ app.py (Flask server, render templates)
+  ├─ templates/
+  │  ├─ base.html
+  │  ├─ login.html
+  │  └─ tasks.html
+  └─ static/
+     └─ style.css
+
+backend/
+  ├─ Dockerfile
+  ├─ requirements.txt (Flask, SQLAlchemy)
+  ├─ app.py (Flask API)
+  ├─ models.py (Task model)
+  └─ tests/
+     └─ test_api.py
+
+database/
+  ├─ Dockerfile
+  ├─ requirements.txt (Flask)
+  ├─ app.py (CRUD API)
+  ├─ schema.py (database schema)
+  └─ migrations/ (schema versions)
+
+scripts/
+  ├─ build.sh (test, build, publish)
+  ├─ review.sh (collect evidence, invoke broker)
+  ├─ deploy.sh (deploy by digest)
+  └─ post-deploy.sh (verification)
+
+.github/workflows/
+  ├─ ci-cd.yml (build, test, review, deploy)
+  └─ post-deployment.yml (verification)
+```
 
 ## Success Criteria
 
-### Functional
-- [ ] Users can create, read, update, delete tasks
-- [ ] HTMX updates work without full page reload
-- [ ] Data persists across sessions
-- [ ] Authentication with demo credentials works
+### Phase 1: Application Works
+- [ ] `docker-compose up --build` succeeds
+- [ ] Can login with demo credentials
+- [ ] Can create task
+- [ ] Can list tasks
+- [ ] Can delete task
+- [ ] Data persists across restarts
 
-### Technical
-- [ ] All tests pass (80%+ coverage)
-- [ ] Linting and security checks pass
+### Phase 2: Pipeline Works
+- [ ] GitHub Actions workflow runs
+- [ ] Tests pass (pytest)
 - [ ] Docker images build cleanly
-- [ ] docker-compose up works end-to-end
+- [ ] Images are published with digests
+- [ ] Evidence is collected in JSON
 
-### Governance
-- [ ] CI/CD pipeline runs successfully
-- [ ] Evidence collection works
-- [ ] Broker integration points are stubbed
-- [ ] Gate decisions are enforced
+### Phase 3: Broker Integration Works
+- [ ] Broker can be invoked with evidence
+- [ ] Policy decisions are returned (PASS/FAIL/APPROVAL_REQUIRED)
+- [ ] Decisions are enforced (block/approve/deploy)
+- [ ] Approval gate routing works
+- [ ] Human can approve/reject
 
-### Documentation
-- [ ] README explains purpose clearly
-- [ ] Getting started is simple (3 commands)
-- [ ] Architecture is documented
-- [ ] Troubleshooting guide included
+### Phase 4: Deployment Works
+- [ ] Approved digests are deployed
+- [ ] No rebuild occurs (digest used directly)
+- [ ] Post-deployment workflow runs
+- [ ] Post-deployment evidence collected
+- [ ] Stricter post-deploy policy applied
 
-## Important Design Decisions
+### Phase 5: Ready to Demo
+- [ ] All tests passing
+- [ ] Linting/security checks passing
+- [ ] Complete documentation
+- [ ] Runbook for operators
+- [ ] Demo scenario documented
 
-### By Design (Not Bugs)
-- **SQLite not persistent in Azure** — Data may reset on container restart. Acceptable for POC. (Production would use managed database.)
-- **Demo credentials only** — No OAuth/LDAP. Simple `.env` file authentication.
-- **No auto-rollback** — Post-deployment can fail but won't trigger automatic rollback.
-- **No advanced UI** — Functional, not beautiful. Focus on governance, not UX polish.
-- **Logs only, no monitoring** — No continuous alerting or metrics dashboards.
+## Key Implementation Notes
 
-### Deliberate Scope Limits
-- Simple task model (title, description, status)
-- Single-user per login (no multi-user authorization levels)
-- Local development focus (Azure deployment docs only)
-- POC-quality, not production-ready
+### Evidence Collection
+Evidence includes:
+- Source code diff
+- Dependencies (requirements.txt, etc.)
+- Test results
+- Build logs
+- Image metadata
 
-## How to Begin
+Format: JSON with explicit paths (no absolute paths, no `../`)
 
-### Prerequisites
-```sh
-git --version           # Git
-python --version        # Python 3.12+
-docker --version        # Docker
-docker compose --version
+### Policy Outcomes
+- `PASS` (0): Proceed to other checks
+- `FAIL` (10): Block release
+- `APPROVAL_REQUIRED` (20): Route to approval gate
+- `ERROR` (30): Block release (validation/provider failure)
+
+### Post-Deployment Policy (Stricter)
+- `CRITICAL/HIGH/MEDIUM` findings → FAIL
+- (vs. pre-deploy: `MEDIUM` → APPROVAL_REQUIRED)
+
+### Immutable Deployment
+- Image digest from approved build
+- No rebuild after approval
+- Exactly what was reviewed runs in production
+
+## Deployment Workflow
+
 ```
-
-### Phase 1 Start
-```sh
-# 1. Create database module
-#    - Define User and Task models
-#    - Write migrations
-#    - Unit tests for CRUD
-
-# 2. Create backend module
-#    - Flask app structure
-#    - Authentication middleware
-#    - API endpoints (stubs)
-
-# 3. Create frontend module
-#    - Templates (login, task list)
-#    - Static assets
-#    - Nginx config
-
-# 4. Set up docker-compose.yml (basic)
-#    - Bring services together
-#    - Test locally
+Local Development
+    ↓
+git push → GitHub Actions
+    ├─ Test
+    ├─ Build (publish digest)
+    ├─ Collect evidence
+    ├─ Broker review (pre-deploy)
+    ↓
+Policy Decision
+    ├─ PASS → proceed
+    ├─ FAIL → block
+    └─ APPROVAL_REQUIRED → human gate
+    ↓
+Approval Gate (if needed)
+    ├─ Human reviews findings
+    ├─ Approves or rejects
+    ↓
+Deployment
+    ├─ Deploy reviewed digest (no rebuild)
+    ↓
+Post-Deployment Verification
+    ├─ Collect state evidence
+    ├─ Broker review (post-deploy, stricter)
+    ├─ Verify or fail
+    ↓
+Done
 ```
 
 ## Testing Strategy
 
 ### Unit Tests
-- Database model CRUD
-- API endpoint request/response
-- Authentication validation
-- Input validation
+- Model CRUD
+- API endpoints
+- Validation logic
 
 ### Integration Tests
-- Full request cycle (create → read → update → delete)
-- Authentication flow
-- Error scenarios
+- Full request cycles
 - Database transactions
+- Authentication flow
 
-### Quality Checks
-- Linting (flake8)
-- Security (Bandit)
-- Coverage (80%+ target)
-- Dependency audit
+### Governance Tests
+- Evidence collection correctness
+- Broker invocation format
+- Decision enforcement
+- Approval routing
 
-## Debugging Tips
+## Important: This Is Not Production
 
-### Common Issues
-1. **Port conflicts** — Port 8080 already in use
-2. **SQLite locked** — Multiple processes accessing database
-3. **HTMX not updating** — Incorrect endpoint URLs or response format
-4. **Tests failing** — Database not initialized or fixtures missing
+- POC-quality code
+- Demo-grade security
+- Not for enterprise use
+- Acceptable for governance proof-of-concept
 
-### Quick Checks
-```sh
-# Check if port 8080 is available
-netstat -an | grep 8080
+## Questions?
 
-# View docker logs
-docker compose logs -f frontend
-
-# Run tests with verbose output
-pytest -v --tb=short
-
-# Run linting
-flake8 .
-```
-
-## Documentation Requirements
-
-Each module should have:
-- [ ] Docstrings for classes and functions
-- [ ] README with setup instructions
-- [ ] Example requests/responses for APIs
-- [ ] Architecture diagram (updated in docs/)
-
-## Deployment Workflow (Post-POC)
-
-```
-Local Development
-    ↓
-git push → GitHub Actions (test, build, publish)
-    ↓
-Manual Review & Approval
-    ↓
-Deployment to Azure Container Apps
-    ↓
-Post-Deployment Verification
-```
-
-## Contact & Questions
-
-If questions arise during development:
-1. Check existing documentation (docs/*)
-2. Review similar features already implemented
-3. Consult phase deliverables for scope
-4. Ask before deviating from planned architecture
+Refer to:
+1. [Architecture & Release Flow](docs/architecture.md)
+2. [Broker Reference](docs/broker.md)
+3. [Operations Guide](docs/operations.md)
+4. [Getting Started](docs/USAGE.MD)
 
 ---
 
 **Status:** Ready to begin Phase 1  
-**Next:** Database & Backend Foundation  
-**Timeline:** 5 weeks to complete demo
+**Next:** Create minimal application structure  
+**Timeline:** 2-3 weeks to complete demo

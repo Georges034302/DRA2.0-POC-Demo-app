@@ -1,32 +1,36 @@
-# DRA 2.0 POC Demo Application
+# DRA 2.0 Release Governance Proof of Concept
 
-An enterprise-grade task management system demonstrating AI-driven release governance with automated evidence review and human-controlled approval gates.
+Demonstrates release governance with policy-driven approval gates and evidence-based deployment decisions.
 
-## The POC Project
+## The Proof of Concept
 
-- **Task Management Application** — Containerized, multi-tier system (Frontend, Backend, Database) for authenticated task operations
-- **Release Governance Platform** — Orchestrates code review, evidence analysis, and deployment gates with deterministic policy enforcement
-- **Proof of Concept** — Not production-ready; demonstrates integration patterns between applications and AI-driven policy engines
+**Goal:** Prove that a broker-based policy engine can control application deployments through evidence review and human approval gates.
 
-## What Is AI-Broker
+**What This Does:**
+- Collects evidence from code builds (changes, dependencies, test results)
+- Submits evidence to a policy engine (Broker) for review
+- Enforces policy decisions (PASS/FAIL/APPROVAL_REQUIRED/ERROR)
+- Routes approval decisions to human reviewers when needed
+- Deploys only approved, reviewed code digests
+- Verifies post-deployment state
 
-An external, independently maintained policy engine that:
-- Analyzes selected code, build, and deployment evidence using Gemini or Groq
-- Returns deterministic outcomes: PASS, FAIL, APPROVAL_REQUIRED, or ERROR
-- Enforces configurable policy (critical/high findings block release, medium findings gate approval)
-- Handles pre-deployment review (can require approval) and post-deployment verification (stricter policy)
+**Not What This Is:**
+- Not about features or user experience
+- Not a production application
+- Not complex business logic
+- The application itself is minimal; the governance pipeline is the focus
 
 ## How It Works
 
 ```mermaid
 flowchart LR
     A["<b>Build</b><br/>Test & Build<br/>Publish Digest"] 
-    B["<b>Prepare Evidence</b><br/>Pre-filter Code<br/>Redact Secrets"]
-    C["<b>AI-Broker Review</b><br/>Analyze Evidence<br/>Gemini or Groq"]
-    D{{"<b>Gate Decision</b><br/>PASS/FAIL/APPROVAL"}}
-    E["<b>Human Approval</b><br/>If Required<br/>Protected Environment"]
-    F["<b>Deploy</b><br/>Reviewed Digests<br/>No Rebuild"]
-    G["<b>Post-Deploy Verify</b><br/>Collect Logs<br/>Re-scan Evidence"]
+    B["<b>Prepare Evidence</b><br/>Collect Code<br/>Changes & Logs"]
+    C["<b>Broker Review</b><br/>Analyze Evidence<br/>Apply Policy"]
+    D{{"<b>Policy Decision</b><br/>PASS/FAIL/APPROVAL"}}
+    E["<b>Human Approval</b><br/>If Required<br/>Protected Gate"]
+    F["<b>Deploy</b><br/>Approved Digest<br/>No Rebuild"]
+    G["<b>Post-Deploy</b><br/>Verify State<br/>Stricter Policy"]
     
     A -->|Build Complete| B
     B -->|Evidence Ready| C
@@ -51,25 +55,25 @@ flowchart LR
 
 ```mermaid
 graph LR
-    subgraph Runtime["<b>🏃 Runtime Application</b>"]
-        Browser["<b>Browser</b><br/>User Access"]
-        Frontend["<b>Frontend</b><br/>Nginx + Flask<br/>HTMX"]
-        Backend["<b>Backend</b><br/>Flask REST API"]
-        Database["<b>Database</b><br/>SQLite + CRUD"]
+    subgraph Runtime["<b>Runtime Application</b>"]
+        Browser["<b>Browser</b><br/>Access"]
+        Frontend["<b>Frontend</b><br/>Nginx + Flask"]
+        Backend["<b>Backend</b><br/>Flask API"]
+        Database["<b>Database</b><br/>SQLite"]
         Browser -->|HTTPS| Frontend
         Frontend -->|Internal| Backend
         Backend -->|Internal| Database
     end
     
-    subgraph Governance["<b>⚙️ CI/CD Governance</b>"]
-        Build["<b>Build</b><br/>Test, Publish<br/>Digests"]
-        Broker["<b>AI-Broker</b><br/>Evidence Review<br/>Policy Engine"]
-        Gate["<b>Gate</b><br/>PASS/FAIL<br/>APPROVAL"]
+    subgraph Governance["<b>Governance Pipeline</b>"]
+        Build["<b>Build</b><br/>Test, Publish"]
+        Broker["<b>Broker</b><br/>Policy Engine"]
+        Gate["<b>Gate</b><br/>Decision"]
         Build -->|Evidence| Broker
-        Broker -->|Decision| Gate
+        Broker -->|Policy Decision| Gate
     end
     
-    Governance -->|Deploy| Runtime
+    Governance -->|Deploy Approved| Runtime
     
     style Runtime fill:#E8F4F8,stroke:#2E7D99,stroke-width:2px,color:#000
     style Governance fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000
@@ -82,7 +86,19 @@ graph LR
     style Gate fill:#FFA500,stroke:#CC8400,color:#fff,stroke-width:2px
 ```
 
-**Key Design:** Only frontend is public (HTTPS). Backend and database are internal. AI-Broker is external, invoked during CI/CD only.
+**Key Design:** Only frontend is public. Backend and database are internal. Broker is invoked during deployment decisions, not runtime.
+
+## The Application
+
+The app is intentionally minimal — a simple task tracker to have *something to deploy*.
+
+**Functionality:**
+- Login with demo credentials
+- Create, read, delete tasks
+- Simple HTML UI (no framework, no fancy design)
+- SQLite storage
+
+**Purpose:** Proves the governance pipeline works with a real (if simple) application.
 
 ## Quick Start
 
@@ -98,54 +114,79 @@ docker compose up --build
 open http://localhost:8080
 ```
 
-## Project Structure
+## What Matters Here
 
-```
-frontend/           # Nginx reverse proxy + Flask UI + HTMX
-backend/            # Flask REST API + task validation
-database/           # CRUD API + SQLite persistence
-scripts/            # Automation: build, review, deploy, verify
-.github/workflows/  # Release and post-deployment gates
-docs/               # Complete documentation
-```
+| Concern | What We're Proving |
+|---------|-------------------|
+| **Evidence Collection** | Can we extract code and build data? |
+| **Policy Enforcement** | Does the Broker correctly apply policy? |
+| **Approval Gates** | Can humans block or approve? |
+| **Immutable Deployment** | Does reviewed code actually deploy unchanged? |
+| **Post-Deploy Verification** | Can we verify deployment and enforce stricter policy? |
+
+**NOT the focus:**
+- Beautiful UI
+- Complex features
+- Enterprise scalability
+- User experience
 
 ## Documentation
 
 | Document | Purpose |
 |----------|---------|
-| **[Architecture](docs/architecture.md)** | Complete CI/CD flow, broker integration, deployment stages |
-| **[AI-Broker](docs/broker.md)** | Review modes, exit codes, policy evaluation, findings format |
-| **[Operations](docs/operations.md)** | Security, Azure deployment, limits, troubleshooting |
-| **[Getting Started](docs/USAGE.MD)** | Local setup, Docker Compose, Azure scripts, validation |
-| **[Glossary](docs/glossary.md)** | Terminology and definitions |
+| **[Architecture](docs/architecture.md)** | Release governance flow, broker integration, deployment stages |
+| **[Broker Reference](docs/broker.md)** | Policy outcomes, evidence validation, result format |
+| **[Operations](docs/operations.md)** | Security, deployment, troubleshooting |
+| **[Getting Started](docs/USAGE.MD)** | Local setup, Docker Compose, scripts |
 
 See **[Documentation Index](docs/index.MD)** for complete navigation.
 
-## Security & Compliance
+## Key Design Decisions
 
-- **Immutable Digests:** Reviewed images deployed by digest; no rebuilds
-- **Evidence Redaction:** Pre-filter secrets before broker analysis (best-effort redaction)
-- **Approval Gates:** Configurable human approval via protected GitHub environments
-- **Audit Trail:** All results retained for 30 days
-- **Credential Storage:** All secrets in protected CI/CD variables; never exposed to untrusted PRs
+### By Design
+- **Application is minimal** — Just enough to deploy and verify
+- **Broker is external** — Separate service, not included in code
+- **Evidence is collected** — Code, logs, build artifacts
+- **Policy gates are enforced** — Humans approve when policy requires it
+- **Deployment is immutable** — No rebuilds after review
+- **Post-deploy is stricter** — Tighter policy for runtime safety
 
-## Important Limitations
+### Scope Limits
+- Simple app (task tracker)
+- Demo credentials (no OAuth/LDAP)
+- No auto-rollback (deliberate limitation)
+- No persistent storage in Azure (POC design)
 
-- **Not for Production:** POC only; not hardened or tested for production use
-- **No Automatic Rollback:** Post-deployment verification can fail but does not trigger rollback
-- **Data Persistence:** Azure deployment does not configure persistent storage; database may reset on restart
-- **Broker Scope:** Broker is external service; not built, maintained, or included in this repository
-- **Model Recommendations:** Broker findings are model-generated; not verified vulnerabilities
+## Development Phases
 
-## License & Access
+| Phase | Focus | Duration |
+|-------|-------|----------|
+| 1 | Minimal app (database, API, basic UI) | Week 1 |
+| 2 | Docker & docker-compose | Week 1 |
+| 3 | CI/CD pipeline & evidence collection | Week 2 |
+| 4 | Broker integration & approval gates | Week 2 |
+| 5 | Testing, quality gates, post-deploy | Week 1 |
 
-**Proprietary.** Public visibility grants no reuse, modification, testing, or deployment rights.
+## Success Criteria
 
-Execution, testing, and deployment require prior written permission from the copyright holder.  
+✓ Application runs (docker-compose up works)  
+✓ CI/CD pipeline executes (test → build → publish)  
+✓ Evidence is collected and formatted correctly  
+✓ Broker can be invoked (mocked or real)  
+✓ Policy decisions are enforced (PASS/FAIL/APPROVAL)  
+✓ Approval gates work (human can approve/reject)  
+✓ Deployment uses reviewed digests (no rebuild)  
+✓ Post-deployment verification runs  
+
+## License
+
+**Proprietary.** Public visibility grants no reuse or deployment rights.
+
+Execution, testing, and deployment require prior written permission.  
 See [LICENSE](LICENSE) for complete terms.
 
 ---
 
 <p align="center">
-	<sub><span style="color:#666">DRA 2.0 POC · Release Governance Demo · Dr. Georges Bou Ghantous © 2026</span></sub>
+	<sub><span style="color:#666">DRA 2.0 POC · Release Governance Demonstration · Dr. Georges Bou Ghantous © 2026</span></sub>
 </p>
