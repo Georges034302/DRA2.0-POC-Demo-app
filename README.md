@@ -1,114 +1,125 @@
-# DRA 2.0 POC Demo App
+# DRA 2.0 POC Demo Application
 
-- Containerized task-management demo with pre- and post-deployment AI-Broker evidence review.
-- Proprietary proof of concept, not a production-ready product.
-- Not open to external contributions; see the [contribution policy](docs/CONTRIBUTING.md).
+An enterprise-grade task management system demonstrating AI-driven release governance with automated evidence review and human-controlled approval gates.
 
-## What’s inside
+## The POC Project
 
-| Service | Responsibility |
-| --- | --- |
-| Frontend | Authenticated task UI, served by Nginx and Flask; HTMX powers task updates. |
-| Backend | Internal REST API and task validation. |
-| Database | Internal CRUD API with SQLite storage. |
+- **Task Management Application** — Containerized, multi-tier system (Frontend, Backend, Database) for authenticated task operations
+- **Release Governance Platform** — Orchestrates code review, evidence analysis, and deployment gates with deterministic policy enforcement
+- **Proof of Concept** — Not production-ready; demonstrates integration patterns between applications and AI-driven policy engines
 
-- Only the frontend is publicly exposed; backend and database APIs are internal.
+## What Is AI-Broker
 
-## Application and Release Flow
+An external, independently maintained policy engine that:
+- Analyzes selected code, build, and deployment evidence using Gemini or Groq
+- Returns deterministic outcomes: PASS, FAIL, APPROVAL_REQUIRED, or ERROR
+- Enforces configurable policy (critical/high findings block release, medium findings gate approval)
+- Handles pre-deployment review (can require approval) and post-deployment verification (stricter policy)
 
-```mermaid
-flowchart LR
-    subgraph Runtime[Application runtime]
-        Browser --> Frontend[Frontend<br/>Nginx + Flask]
-        Frontend --> Backend[Backend<br/>Flask API]
-        Backend --> Database[Database<br/>Flask + SQLite]
-    end
+## How It Works
 
-    subgraph Workflow[Consuming CI/CD workflows]
-        Build[Test, build and publish<br/>immutable application image digests]
-        Pre[Prepare pre_deploy request<br/>and selected, pre-filtered evidence]
-        PreGate{Pre-deploy outcome}
-        Approval[Separately authorized approval gate<br/>Protected dra-approval environment]
-        Checks{All other checks passed?}
-        Deploy[Deploy reviewed image digests<br/>without rebuilding]
-        Block[Block release]
-        Post[Separate post-deployment workflow<br/>Collect revision and health evidence<br/>Prepare post_deploy request]
-        PostGate{Post-deploy outcome}
-        Verified[Verification passed]
-        Failed[Verification failed<br/>No automatic rollback]
-    end
-
-    subgraph Broker[AI-Broker container - pinned approved GHCR digest]
-        Input[Validate JSON request and explicitly listed evidence<br/>Check relative paths, UTF-8 text and size limits]
-        Scan[Best-effort redaction<br/>Gemini or Groq evidence analysis]
-        Policy[Deterministic policy evaluation<br/>Default: critical/high fail, medium needs approval<br/>Medium fails in post_deploy mode]
-        Result[JSON result and exit code<br/>Outcome, summary, findings, policy version, metrics]
-        Input --> Scan --> Policy --> Result
-        Input -->|Invalid input| Result
-        Scan -->|Provider error| Result
-    end
-
-    Build --> Pre --> Input
-    Result --> Mode{Request mode}
-    Mode -->|pre_deploy| PreGate
-    PreGate -->|PASS - exit code 0| Checks
-    PreGate -->|APPROVAL_REQUIRED - exit code 20| Approval
-    PreGate -->|FAIL - exit code 10| Block
-    PreGate -->|ERROR - exit code 30| Block
-    Approval -->|Approved and gate enabled| Checks
-    Approval -->|Rejected or gate disabled| Block
-    Checks -->|Yes| Deploy
-    Checks -->|No| Block
-    Deploy -.-> Runtime
-    Deploy --> Post --> Input
-    Mode -->|post_deploy| PostGate
-    PostGate -->|PASS - exit code 0| Verified
-    PostGate -->|FAIL - exit code 10| Failed
-    PostGate -->|ERROR - exit code 30| Failed
+```
+Build Phase          Review Phase              Deployment Phase
+─────────────────    ──────────────────       ──────────────────
+Test & build    →    Pre-filter evidence  →   AI-Broker analyzes  →  Gate decision
+Publish digest       (redact secrets)          (Gemini/Groq)         (PASS/FAIL/APPROVAL)
+                                                                      ↓
+                                              Human approval  →  Deploy reviewed digests
+                                              (if required)        (immutable, no rebuild)
+                                                                   ↓
+                                              Post-deploy verification
+                                              (separate invocation)
 ```
 
-## Broker Review
+## Architecture
 
-- AI-Broker is private, maintained separately, and not included in this repository.
-- It reviews selected evidence using Gemini or Groq and maps findings to policy outcomes.
-- Workflows enforce release gates and retain results; the broker does not build, deploy, or modify code.
-- Post-deployment review is a separate invocation, not continuous monitoring or automatic rollback.
-- Findings are model-generated recommendations, not verified vulnerabilities.
+```
+┌─────────────────────────────────────────────────────────┐
+│  Runtime (Application)                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐    │
+│  │   Browser   │→ │  Frontend   │→ │   Backend    │→ DB │
+│  │ (Public)    │  │ (Nginx/Flask)  │ (Flask API) │    │
+│  └─────────────┘  └─────────────┘  └──────────────┘    │
+└─────────────────────────────────────────────────────────┘
 
-### Outcomes
+┌─────────────────────────────────────────────────────────┐
+│  CI/CD Pipeline                                         │
+│  Build → Evidence → AI-Broker → Gate → Deploy → Verify  │
+└─────────────────────────────────────────────────────────┘
 
-- Numbers are broker process exit codes, not severity scores.
-- `PASS` (`0`): broker check passes; all other required checks must also pass.
-- `APPROVAL_REQUIRED` (`20`): pre-deployment review requires an enabled, protected approval gate and human approval.
-- `FAIL` (`10`): findings trigger a policy failure, including approval-level findings in post-deployment mode.
-- `ERROR` (`30`): the scan could not complete, for example due to invalid evidence or a provider error.
-- `FAIL` and `ERROR` block release or fail post-deployment verification; errors never authorize deployment.
+┌─────────────────────────────────────────────────────────┐
+│  AI-Broker (External Service)                           │
+│  • Validates input (JSON, paths, UTF-8, sizes)          │
+│  • Redacts sensitive data (best-effort)                 │
+│  • Analyzes evidence (Gemini or Groq)                   │
+│  • Evaluates policy → exit code (0/10/20/30)            │
+└─────────────────────────────────────────────────────────┘
+```
 
-## Operation and Limits
+**Key Design:** Only frontend is public; backend and database are internal. Broker is invoked during CI/CD, not runtime.
 
-- Use the [usage guide](docs/USAGE.MD) for local execution and Azure script entry points.
-- Manually dispatch the release workflow; automatic runs on pushes to `main` are disabled.
-- Deploy reviewed, immutable image digests without rebuilding; the deployment script alone does not enforce review gates.
-- Pin the private broker image to an approved GHCR digest.
-- Pre-filter sensitive evidence before external inference; redaction is best-effort.
-- Keep credentials in protected CI secrets and never expose them to untrusted pull requests.
-- Azure SQLite storage is not configured for persistence; container restarts or replacement may lose data.
+## Quick Start
+
+```sh
+# Configure credentials
+cp .env.example .env
+# Edit .env: set INTERNAL_API_TOKEN, DEMO_USERNAME, DEMO_PASSWORD
+
+# Run locally
+docker compose up --build
+
+# Access the application
+open http://localhost:8080
+```
+
+## Project Structure
+
+```
+frontend/           # Nginx reverse proxy + Flask UI + HTMX
+backend/            # Flask REST API + task validation
+database/           # CRUD API + SQLite persistence
+scripts/            # Automation: build, review, deploy, verify
+.github/workflows/  # Release and post-deployment gates
+docs/               # Complete documentation
+```
 
 ## Documentation
 
-- [Documentation index](docs/index.MD)
-- [Usage and script reference](docs/USAGE.MD)
-- [Contribution policy](docs/CONTRIBUTING.md)
-- [Glossary](docs/glossary.md)
+| Document | Purpose |
+|----------|---------|
+| **[Architecture](docs/architecture.md)** | Complete CI/CD flow, broker integration, deployment stages |
+| **[AI-Broker](docs/broker.md)** | Review modes, exit codes, policy evaluation, findings format |
+| **[Operations](docs/operations.md)** | Security, Azure deployment, limits, troubleshooting |
+| **[Getting Started](docs/USAGE.MD)** | Local setup, Docker Compose, Azure scripts, validation |
+| **[Glossary](docs/glossary.md)** | Terminology and definitions |
 
-## License
+See **[Documentation Index](docs/index.MD)** for complete navigation.
 
-- Public visibility grants no reuse permission; see the [proprietary license](LICENSE).
-- Execution, testing, and deployment require prior written permission.
-- Third-party packages remain subject to their own licenses.
+## Security & Compliance
+
+- **Immutable Digests:** Reviewed images deployed by digest; no rebuilds
+- **Evidence Redaction:** Pre-filter secrets before broker analysis (best-effort redaction)
+- **Approval Gates:** Configurable human approval via protected GitHub environments
+- **Audit Trail:** All results retained for 30 days
+- **Credential Storage:** All secrets in protected CI/CD variables; never exposed to untrusted PRs
+
+## Important Limitations
+
+- **Not for Production:** POC only; not hardened or tested for production use
+- **No Automatic Rollback:** Post-deployment verification can fail but does not trigger rollback
+- **Data Persistence:** Azure deployment does not configure persistent storage; database may reset on restart
+- **Broker Scope:** Broker is external service; not built, maintained, or included in this repository
+- **Model Recommendations:** Broker findings are model-generated; not verified vulnerabilities
+
+## License & Access
+
+**Proprietary.** Public visibility grants no reuse, modification, testing, or deployment rights.
+
+Execution, testing, and deployment require prior written permission from the copyright holder.  
+See [LICENSE](LICENSE) for complete terms.
 
 ---
 
 <p align="center">
-	<sub><sup><span style="color:#9aa0a6">👨‍🎓 Author: Dr. Georges Bou Ghantous © 2026</span></sup></sub>
+	<sub><span style="color:#666">DRA 2.0 POC · Release Governance Demo · Dr. Georges Bou Ghantous © 2026</span></sub>
 </p>
