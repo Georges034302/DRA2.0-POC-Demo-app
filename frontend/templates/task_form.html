@@ -1,0 +1,37 @@
+<form id="editTaskForm" hx-patch="/api/tasks/{{ task.id }}" hx-on="htmx:afterRequest: handleEditTaskResponse(event)" hx-target="#task-{{ task.id }}" hx-swap="outerHTML">
+  <div class="form-group">
+    <label for="editTaskTitle">Task Title *</label>
+    <input type="text" id="editTaskTitle" name="title" value="{{ task.title }}" placeholder="Enter task title" required />
+  </div>
+
+  <div class="form-group">
+    <label for="editTaskDescription">Description</label>
+    <textarea id="editTaskDescription" name="description" placeholder="Enter task description">{{ task.description }}</textarea>
+  </div>
+
+  <div class="form-group">
+    <label for="editTaskStatus">Status *</label>
+    <select id="editTaskStatus" name="status" required>
+      <option value="pending" {% if task.status == 'pending' %}selected{% endif %}>Pending</option>
+      <option value="in_progress" {% if task.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+      <option value="completed" {% if task.status == 'completed' %}selected{% endif %}>Completed</option>
+    </select>
+  </div>
+
+  <div class="modal-footer">
+    <button type="button" class="btn-secondary" onclick="modalManager.close('editTaskModal')">Cancel</button>
+    <button type="submit" class="btn-primary">Save Changes</button>
+  </div>
+</form>
+
+<script>
+  function handleEditTaskResponse(event) {
+    if (event.detail.xhr.status === 200) {
+      showAlert("Task updated successfully", "success");
+      modalManager.close("editTaskModal");
+      htmx.ajax("GET", "/api/tasks", { target: "#taskList", swap: "innerHTML" });
+    } else {
+      showAlert("Failed to update task", "error");
+    }
+  }
+</script>

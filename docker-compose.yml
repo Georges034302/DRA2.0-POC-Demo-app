@@ -1,34 +1,58 @@
+version: '3.9'
+
 services:
-  database:
-    build: ./database
-    environment:
-      DATABASE_PATH: /data/tasks.db
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Required}
-    volumes:
-      - sqlite_data:/data
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health',timeout=3)"]
-      interval: 10s
-      timeout: 4s
-      retries: 5
-  backend:
-    build: ./backend
-    environment:
-      DATABASE_URL: http://database:5000
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Required}
-    depends_on:
-      database:
-        condition: service_healthy
+  # Frontend: Nginx reverse proxy + static assets
   frontend:
     build: ./frontend
+    container_name: dra-frontend
     ports:
-      - "8080:8080"
-    environment:
-      BACKEND_URL: http://backend:5000
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Required}
-      DEMO_USERNAME: ${DEMO_USERNAME:?Required}
-      DEMO_PASSWORD: ${DEMO_PASSWORD:?Required}
+      - "80:80"
     depends_on:
       - backend
+    networks:
+      - dra-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Backend: Flask API + SQLite
+  backend:
+    build: ./backend
+    container_name: dra-backend
+    environment:
+      FLASK_ENV: production
+      PYTHONUNBUFFERED: 1
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      DATABASE_URL: sqlite:////data/tasks.db
+      DEMO_USERNAME: ${DEMO_USERNAME:-user}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-password}
+    volumes:
+      - sqlite_data:/data
+    networks:
+      - dra-network
+    expose:
+      - "5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Database placeholder (future use - currently SQLite in backend)
+  database:
+    image: alpine:latest
+    container_name: dra-database
+    command: /bin/sh -c "echo 'Database placeholder - using SQLite in backend'"
+    networks:
+      - dra-network
+
+networks:
+  dra-network:
+    driver: bridge
+
 volumes:
   sqlite_data:
+    driver: local
+

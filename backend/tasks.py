@@ -1,15 +1,34 @@
-PRIORITIES = {'low','medium','high'}
-STATUSES = {'todo','in_progress','done'}
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
-def validate(data, existing=None):
-    if not isinstance(data,dict): raise ValueError('Expected a JSON object')
-    d = dict(existing or {})
-    for key in ('title','description','priority','status'):
-        if key in data: d[key]=data[key]
-    title=d.get('title','')
-    desc=d.get('description','')
-    if not isinstance(title,str) or not 1 <= len(title.strip()) <= 120: raise ValueError('Title must be 1–120 characters')
-    if not isinstance(desc,str) or len(desc)>2000: raise ValueError('Description must be at most 2000 characters')
-    if d.get('priority','medium') not in PRIORITIES: raise ValueError('Invalid priority')
-    if d.get('status','todo') not in STATUSES: raise ValueError('Invalid status')
-    return dict(title=title.strip(),description=desc.strip(),priority=d.get('priority','medium'),status=d.get('status','todo'))
+db = SQLAlchemy()
+
+
+class Task(db.Model):
+    __tablename__ = 'tasks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, default='')
+    status = db.Column(db.String(20), default='pending')  # pending, in_progress, completed
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'status': self.status,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
+    
+    def __repr__(self):
+        return f'<Task {self.id}: {self.title}>'
+
+
+def init_db():
+    """Initialize database"""
+    db.create_all()
+
