@@ -11,6 +11,50 @@ The POC demonstrates a release governance system where a Broker (policy engine) 
 4. **Enforcing approval gates** before deployment
 5. **Verifying post-deployment state** and making stricter policy decisions
 
+## System Architecture
+
+```mermaid
+graph TB
+    subgraph Client["Client"]
+        Browser["🌐 Browser"]
+    end
+    
+    subgraph Frontend["Frontend Container (Nginx)"]
+        FE["Reverse Proxy<br/>Static Assets<br/>Templates"]
+    end
+    
+    subgraph Backend["Backend Container (Flask)"]
+        API["Flask API<br/>Authentication<br/>CRUD Routes"]
+        DB["SQLite Database<br/>Task Storage"]
+    end
+    
+    subgraph Governance["Governance (Future - Phase 3+)"]
+        CI["GitHub Actions<br/>CI/CD Pipeline"]
+        Broker["Broker Engine<br/>Policy Evaluation"]
+    end
+    
+    Browser -->|HTTP/80| FE
+    FE -->|Proxy /api<br/>http:5000| API
+    API -->|Read/Write| DB
+    CI -->|Build, Test<br/>Publish| FE
+    CI -->|Collect Evidence| Broker
+    Broker -->|Policy Decision| CI
+    
+    style Browser fill:#4A90E2,stroke:#000,stroke-width:2px,color:#fff
+    style FE fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff
+    style API fill:#50C878,stroke:#000,stroke-width:2px,color:#fff
+    style DB fill:#FF9800,stroke:#000,stroke-width:2px,color:#fff
+    style CI fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff
+    style Broker fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
+```
+
+**Three-Container Deployment:**
+1. **Frontend** (Nginx): Reverse proxy, static assets (CSS/JS), template serving
+2. **Backend** (Flask): REST API, authentication, task CRUD, SQLite integration
+3. **Database** (SQLite): Embedded in backend for POC; future migration to external database
+
+**Network:** Docker bridge network (`dra-network`) with health checks on each container
+
 ## Release Governance Flow
 
 ```mermaid
@@ -197,6 +241,126 @@ Post-deployment policies are stricter (treat MEDIUM findings as FAIL instead of 
 4. **Two-policy model** — Pre-deploy: can route to approval; post-deploy: stricter, no approval
 5. **Immutable deployments** — By digest, not by tag—ensures reviewed code actually runs
 6. **Broker is stateless** — No side effects, only policy evaluation; evidence is the source of truth
+
+## System Components
+
+### Frontend Service (Nginx)
+- **Role**: Reverse proxy, static file serving, request routing
+- **Port**: 80
+- **Serves**:
+  - Static assets: CSS (`style.css`), JavaScript (`app.js`)
+  - Templates: HTML templates (Jinja2)
+  - Login page, dashboard, task forms
+- **Proxies to**: Backend Flask API (`http://backend:5000`)
+- **Features**:
+  - Gzip compression
+  - Security headers (X-Frame-Options, CSP)
+  - Cache control for static assets
+  - Health check endpoint (`/health`)
+
+### Backend Service (Flask)
+- **Role**: REST API, session management, authentication, business logic
+- **Port**: 5000
+- **Endpoints**:
+  - `GET /health` — Health status
+  - `POST /login` — User authentication
+  - `POST /logout` — Session termination
+  - `GET /` — Dashboard page
+  - `GET /api/tasks` — List tasks (JSON or HTMX fragment)
+  - `POST /api/tasks` — Create task
+  - `GET /api/tasks/<id>` — Get single task
+  - `PATCH /api/tasks/<id>` — Update task
+  - `DELETE /api/tasks/<id>` — Delete task
+  - `GET /api/tasks/<id>/edit` — Edit form (HTMX)
+- **Features**:
+  - Session-based authentication (demo: `user` / `password`)
+  - HTMX-friendly responses (HTML fragments)
+  - JSON API for programmatic access
+  - SQLAlchemy ORM with SQLite
+  - Automatic table creation on startup
+
+### Database Service (SQLite)
+- **Type**: Embedded SQLite (in backend for POC)
+- **Location**: `/data/tasks.db` (Docker volume: `sqlite_data`)
+- **Schema**:
+  - `tasks` table: id, title, description, status, created_at, updated_at
+- **Status**: Pending, In Progress, Completed
+- **Future**: Migrate to PostgreSQL for production
+
+### Application Models
+- **Task**:
+  - `id` (integer, primary key)
+  - `title` (string, 1-200 chars, required)
+  - `description` (text, optional)
+  - `status` (enum: pending, in_progress, completed)
+  - `created_at` (datetime, auto-set)
+  - `updated_at` (datetime, auto-update)
+
+## Repository Structure
+
+```
+DRA2.0-POC-Demo-app/
+│
+├── frontend/                      # Nginx reverse proxy container
+│   ├── Dockerfile                # Alpine Nginx image
+│   ├── nginx.conf                # Reverse proxy config, security headers, caching
+│   ├── static/                   # Static assets (served by Nginx)
+│   │   ├── css/
+│   │   │   └── style.css         # Modern dark/light theme CSS (17.5 KB)
+│   │   └── js/
+│   │       └── app.js            # HTMX, theme toggle, modal management (9.7 KB)
+│   └── templates/                # Jinja2 templates (served by Flask, cached)
+│       ├── base.html             # Master template with header, sidebar
+│       ├── login.html            # Authentication page
+│       ├── dashboard.html        # Task manager interface
+│       ├── task_list.html        # Reusable task list fragment
+│       └── task_form.html        # Edit task modal form
+│
+├── backend/                       # Flask API container
+│   ├── Dockerfile                # Python 3.12 + gunicorn
+│   ├── app.py                    # Flask routes, auth, CRUD endpoints (170 lines)
+│   ├── models.py                 # SQLAlchemy Task model, db initialization
+│   ├── requirements.txt           # Flask, SQLAlchemy, gunicorn
+│   └── __pycache__/              # Python bytecode (gitignored)
+│
+├── database/                      # Database placeholder (future PostgreSQL)
+│   └── .gitkeep                  # Placeholder for external DB setup
+│
+├── docs/                          # Documentation hub
+│   ├── index.MD                  # Navigation and quick links
+│   ├── architecture.md           # This file (system design, components, governance)
+│   ├── broker.md                 # Broker policy reference
+│   ├── DEVELOPMENT.md            # Phase breakdown and roadmap
+│   ├── operations.md             # Deployment, security, troubleshooting
+│   ├── USAGE.MD                  # Getting started, local setup
+│   └── glossary.md               # Terminology reference
+│
+├── scripts/                       # Automation scripts (future use)
+│   ├── setup.sh                  # Environment provisioning
+│   ├── build.sh                  # Docker image builds
+│   ├── review.sh                 # Evidence collection, Broker invocation
+│   ├── deploy.sh                 # Immutable deployment by digest
+│   └── post-deploy.sh            # Post-deployment verification
+│
+├── .github/
+│   └── workflows/                # GitHub Actions automation
+│       ├── ci-cd.yml             # Build → Test → Publish → Broker → Deploy
+│       └── post-deployment.yml   # Runtime verification, stricter policy
+│
+├── docker-compose.yml            # 3-container orchestration
+├── README.md                      # Project overview, quick start
+├── LICENSE                        # Proprietary license
+├── .env.example                   # Environment variables template
+├── .gitignore                     # Git exclusions
+└── .git/                          # Git repository
+```
+
+**Directory Summary:**
+- **frontend/**: Nginx + Static assets (CSS, JS) + Templates (~30 KB total)
+- **backend/**: Flask API + SQLite ORM + CRUD logic (~200 lines)
+- **docs/**: Complete documentation (guides, reference, governance flow)
+- **scripts/**: CI/CD automation (future phases)
+- **.github/workflows/**: GitHub Actions pipelines (future phases)
 
 ## Integration Points
 
