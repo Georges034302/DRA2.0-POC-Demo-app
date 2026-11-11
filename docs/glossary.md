@@ -16,7 +16,6 @@
 | Fail closed | Block release when review fails or cannot complete; an error never authorizes deployment. |
 | Finding | Model-generated recommendation, not a verified vulnerability. Results may vary. |
 | GHCR | GitHub Container Registry, which hosts the private broker image. |
-| HTMX | Browser library used for task updates without full-page reloads. |
 | Image digest | Immutable container image identifier, such as `sha256:...`. Pin `BROKER_IMAGE_DIGEST` to an approved GHCR digest, not a mutable tag. |
 | Managed identity | Azure identity used by Container Apps to access resources such as ACR without stored registry credentials. |
 | OIDC | OpenID Connect, used by GitHub Actions to authenticate to Azure. |

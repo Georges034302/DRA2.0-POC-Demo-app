@@ -18,14 +18,13 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open [http://localhost:8080](http://localhost:8080) and sign in with your configured credentials.
+Open [http://localhost](http://localhost) and sign in with your configured credentials.
 
 ```sh
-curl http://localhost:8080/health
+curl http://localhost/health
 ```
 
 - SQLite data persists in a named volume. `docker compose down` stops the app; adding `-v` deletes its data.
-- Dynamic task actions require browser internet access: HTMX 2.0.4 loads from jsDelivr.
 
 ## Test and Build
 

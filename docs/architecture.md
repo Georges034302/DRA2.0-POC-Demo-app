@@ -24,8 +24,11 @@ graph TB
     end
     
     subgraph Backend["Backend Container (Flask)"]
-        API["Flask API<br/>Authentication<br/>CRUD Routes"]
-        DB["SQLite Database<br/>Task Storage"]
+        API["Flask API<br/>Authentication<br/>Task Routes"]
+    end
+
+    subgraph Database["Database Container (Flask)"]
+        DB["CRUD API<br/>SQLite Task Storage"]
     end
     
     subgraph Governance["Governance (Future - Phase 3+)"]
@@ -35,7 +38,7 @@ graph TB
     
     Browser -->|HTTP/80| FE
     FE -->|Proxy /api<br/>http:5000| API
-    API -->|Read/Write| DB
+    API -->|HTTP :5001<br/>Internal token| DB
     CI -->|Build, Test<br/>Publish| FE
     CI -->|Collect Evidence| Broker
     Broker -->|Policy Decision| CI
@@ -50,10 +53,10 @@ graph TB
 
 **Three-Container Deployment:**
 1. **Frontend** (Nginx): Reverse proxy, static assets (CSS/JS), template serving
-2. **Backend** (Flask): REST API, authentication, task CRUD, SQLite integration
-3. **Database** (SQLite): Embedded in backend for POC; future migration to external database
+2. **Backend** (Flask): REST API, authentication, forwards task operations to the database service
+3. **Database** (Flask + SQLite): Microservice that creates and seeds the database (`init-db.py`) and exposes CRUD APIs (`app.py`) for the backend
 
-**Network:** Docker bridge network (`dra-network`) with health checks on each container
+**Network:** All three containers use the host network (`network_mode: host`) because the development environment blocks container-to-container traffic on Docker bridge networks. Ports: frontend 80, backend 5000, database 5001. Each container has a health check. Under host networking these ports are not isolated from the host; use a bridge network where the platform allows it.
 
 ## Release Governance Flow
 
@@ -165,7 +168,7 @@ Example flow:
 
 ### Runtime Tier
 - **Application Pod**: Simple task tracker (minimal feature set)
-- **Database**: SQLite (persistent volume)
+- **Database Service**: Flask CRUD API over SQLite (persistent volume)
 - **Nginx**: Reverse proxy and static file serving
 
 ### Governance Tier
@@ -249,50 +252,55 @@ Post-deployment policies are stricter (treat MEDIUM findings as FAIL instead of 
 - **Port**: 80
 - **Serves**:
   - Static assets: CSS (`style.css`), JavaScript (`app.js`)
-  - Templates: HTML templates (Jinja2)
-  - Login page, dashboard, task forms
-- **Proxies to**: Backend Flask API (`http://backend:5000`)
+  - Static HTML pages: login and dashboard
+- **Proxies to**: Backend Flask API (`http://127.0.0.1:5000`)
 - **Features**:
   - Gzip compression
-  - Security headers (X-Frame-Options, CSP)
-  - Cache control for static assets
+  - Security headers (X-Frame-Options, X-Content-Type-Options)
+  - Short-lived cache control for static assets
   - Health check endpoint (`/health`)
 
 ### Backend Service (Flask)
-- **Role**: REST API, session management, authentication, business logic
+- **Role**: REST API, authentication, forwards task operations to the database service
 - **Port**: 5000
 - **Endpoints**:
   - `GET /health` — Health status
-  - `POST /login` — User authentication
-  - `POST /logout` — Session termination
-  - `GET /` — Dashboard page
-  - `GET /api/tasks` — List tasks (JSON or HTMX fragment)
+  - `POST /api/auth/login` — Checks `DEMO_USERNAME` / `DEMO_PASSWORD` and returns a signed token (valid 8 hours)
+  - `GET /api/tasks` — List tasks
   - `POST /api/tasks` — Create task
   - `GET /api/tasks/<id>` — Get single task
   - `PATCH /api/tasks/<id>` — Update task
   - `DELETE /api/tasks/<id>` — Delete task
-  - `GET /api/tasks/<id>/edit` — Edit form (HTMX)
 - **Features**:
-  - Session-based authentication (demo: `user` / `password`)
-  - HTMX-friendly responses (HTML fragments)
-  - JSON API for programmatic access
-  - SQLAlchemy ORM with SQLite
-  - Automatic table creation on startup
+  - Task routes require `Authorization: Bearer <token>`; tokens are signed with `SECRET_KEY`
+  - Refuses to start unless `SECRET_KEY`, `INTERNAL_API_TOKEN`, `DEMO_USERNAME` and `DEMO_PASSWORD` are set
+  - No direct database access: task requests go to the database service (`DATABASE_SERVICE_URL`, default `http://localhost:5001`)
+  - Returns `502` when the database service is unreachable or rejects the internal token
 
-### Database Service (SQLite)
-- **Type**: Embedded SQLite (in backend for POC)
+### Database Service (Flask + SQLite)
+- **Role**: Owns the data; offers CRUD APIs for the backend
+- **Port**: 5001
+- **Files**:
+  - `init-db.py` — creates the schema and loads initial data (only into an empty table); run on container start
+  - `app.py` — CRUD API
+- **Endpoints**:
+  - `GET /health` — Health status
+  - `GET /api/tasks` — List tasks
+  - `POST /api/tasks` — Create task
+  - `GET /api/tasks/<id>` — Get single task
+  - `PATCH /api/tasks/<id>` — Update task
+  - `DELETE /api/tasks/<id>` — Delete task
+- **Security**: `/api/*` requires the `X-Internal-Token` header matching `INTERNAL_API_TOKEN`
 - **Location**: `/data/tasks.db` (Docker volume: `sqlite_data`)
-- **Schema**:
-  - `tasks` table: id, title, description, status, created_at, updated_at
-- **Status**: Pending, In Progress, Completed
 - **Future**: Migrate to PostgreSQL for production
 
 ### Application Models
 - **Task**:
   - `id` (integer, primary key)
   - `title` (string, 1-200 chars, required)
-  - `description` (text, optional)
-  - `status` (enum: pending, in_progress, completed)
+  - `description` (text, optional, up to 2000 chars)
+  - `priority` (enum: low, medium, high; default medium)
+  - `status` (enum: todo, in_progress, done; default todo)
   - `created_at` (datetime, auto-set)
   - `updated_at` (datetime, auto-update)
 
@@ -301,8 +309,8 @@ Post-deployment policies are stricter (treat MEDIUM findings as FAIL instead of 
 ```
 DRA2.0-POC-Demo-app/
 ├── frontend/                      # Nginx reverse proxy + static assets + templates
-├── backend/                       # Flask API + SQLAlchemy ORM + SQLite
-├── database/                      # Database placeholder (future PostgreSQL)
+├── backend/                       # Flask API (calls the database service)
+├── database/                      # Database microservice: init-db.py + CRUD API over SQLite
 ├── docs/                          # Documentation hub (architecture, guides, reference)
 ├── scripts/                       # Automation scripts (setup, build, deploy, verify)
 ├── .github/                       # GitHub Actions workflows (CI/CD, post-deploy)

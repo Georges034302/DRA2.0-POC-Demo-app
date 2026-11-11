@@ -1,50 +1,57 @@
-version: '3.9'
-
 services:
-  # Frontend: Nginx reverse proxy + static assets
+  # All services use the host network: this environment blocks container-to-container
+  # traffic on Docker bridge networks. Ports: frontend 80, backend 5000, database 5001.
+
+  # Frontend: Nginx serving the UI and proxying /api to the backend.
   frontend:
     build: ./frontend
     container_name: dra-frontend
     network_mode: host
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 10s
       timeout: 5s
       retries: 3
 
-  # Backend: Flask API + SQLite
+  # Backend: Flask API for login and tasks; stores nothing itself, calls the database service.
   backend:
     build: ./backend
     container_name: dra-backend
     network_mode: host
+    depends_on:
+      database:
+        condition: service_healthy
     environment:
-      FLASK_ENV: production
-      PYTHONUNBUFFERED: 1
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
-      DATABASE_URL: sqlite:////data/tasks.db
+      DATABASE_SERVICE_URL: http://localhost:5001
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
       DEMO_USERNAME: ${DEMO_USERNAME:-user}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-password}
-    volumes:
-      - sqlite_data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 10s
       timeout: 5s
       retries: 3
 
-  # Database placeholder (future use - currently SQLite in backend)
+  # Database: CRUD API over SQLite; init-db.py creates the schema on start.
   database:
-    image: alpine:latest
+    build: ./database
     container_name: dra-database
-    command: /bin/sh -c "echo 'Database placeholder - using SQLite in backend'"
-
-networks:
-  dra-network:
-    driver: bridge
+    network_mode: host
+    environment:
+      DATABASE_PATH: /data/tasks.db
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
+    volumes:
+      - sqlite_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
   sqlite_data:
     driver: local
-

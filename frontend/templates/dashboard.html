@@ -5,12 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard - DRA 2.0 POC</title>
     <link rel="stylesheet" href="/static/css/style.css" />
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   </head>
 
   <body>
-    <div id="alertContainer" style="position: fixed; top: 20px; right: 20px; z-index: 2000;"></div>
-
     <header style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); padding: 1rem;">
       <div style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center;">
         <h1 style="margin: 0; color: var(--text-primary);">DRA 2.0 POC</h1>
@@ -32,7 +29,6 @@
       </div>
     </div>
 
-    <!-- Modal for Task Editing -->
     <dialog id="taskModal" class="modal">
       <div class="modal-content">
         <button class="modal-close" type="button" onclick="document.getElementById('taskModal').close()">✕</button>
@@ -57,21 +53,39 @@
 
     <script src="/static/js/app.js"></script>
     <script>
+      // Calls the API with the saved token; a rejected token sends the user back to login.
+      async function apiFetch(url, options = {}) {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(url, {
+          ...options,
+          headers: { ...options.headers, 'Authorization': `Bearer ${token}` }
+        });
+        if (response.status === 401) {
+          logout();
+          throw new Error('Session expired, please log in again');
+        }
+        return response;
+      }
+
+      // Reads the message from a failed API response, falling back to a default.
+      async function responseError(response, fallback) {
+        const body = await response.json().catch(() => ({}));
+        return body.message || fallback;
+      }
+
+      // Fetches all tasks and renders them.
       async function loadTasks() {
         try {
-          const token = localStorage.getItem('auth_token');
-          const response = await fetch('/api/tasks', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (!response.ok) throw new Error('Failed to load tasks');
-          const tasks = await response.json();
-          renderTasks(tasks);
+          const response = await apiFetch('/api/tasks');
+          if (!response.ok) throw new Error(await responseError(response, 'Failed to load tasks'));
+          renderTasks(await response.json());
         } catch (error) {
           console.error('Error loading tasks:', error);
           document.getElementById('tasksContainer').innerHTML = '<p style="color: var(--text-secondary);">Error loading tasks</p>';
         }
       }
 
+      // Draws one card per task, or an empty-state message.
       function renderTasks(tasks) {
         const container = document.getElementById('tasksContainer');
         if (tasks.length === 0) {
@@ -82,7 +96,7 @@
           <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 0.5rem; border-left: 4px solid ${getPriorityColor(task.priority)};">
             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
               <h3 style="margin: 0; color: var(--text-primary);">${escapeHtml(task.title)}</h3>
-              <span style="background: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);">${task.status}</span>
+              <span style="background: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(task.status)}</span>
             </div>
             <p style="margin: 0 0 1rem 0; color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(task.description)}</p>
             <div style="display: flex; gap: 0.5rem;">
@@ -93,17 +107,20 @@
         `).join('');
       }
 
+      // Maps a task priority to its card border color.
       function getPriorityColor(priority) {
         const colors = { low: '#4ade80', medium: '#f59e0b', high: '#ef4444' };
         return colors[priority] || '#888';
       }
 
+      // Escapes text so it is safe to insert into HTML.
       function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
       }
 
+      // Opens the dialog with an empty form for a new task.
       function openNewTaskForm() {
         document.getElementById('taskId').value = '';
         document.getElementById('taskTitle').value = '';
@@ -113,13 +130,11 @@
         document.getElementById('taskModal').showModal();
       }
 
+      // Loads a task into the dialog for editing.
       async function editTask(id) {
         try {
-          const token = localStorage.getItem('auth_token');
-          const response = await fetch(`/api/tasks/${id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (!response.ok) throw new Error('Failed to load task');
+          const response = await apiFetch(`/api/tasks/${id}`);
+          if (!response.ok) throw new Error(await responseError(response, 'Failed to load task'));
           const task = await response.json();
           document.getElementById('taskId').value = task.id;
           document.getElementById('taskTitle').value = task.title;
@@ -129,10 +144,11 @@
           document.getElementById('taskModal').showModal();
         } catch (error) {
           console.error('Error loading task:', error);
-          alert('Failed to load task');
+          alert(error.message);
         }
       }
 
+      // Creates a new task or updates the one open in the dialog.
       async function saveTask(event) {
         event.preventDefault();
         const id = document.getElementById('taskId').value;
@@ -144,53 +160,44 @@
         };
 
         try {
-          const token = localStorage.getItem('auth_token');
-          const method = id ? 'PUT' : 'POST';
-          const url = id ? `/api/tasks/${id}` : '/api/tasks';
-          
-          const response = await fetch(url, {
-            method,
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
+          const response = await apiFetch(id ? `/api/tasks/${id}` : '/api/tasks', {
+            method: id ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(taskData)
           });
-          
-          if (!response.ok) throw new Error('Failed to save task');
+          if (!response.ok) throw new Error(await responseError(response, 'Failed to save task'));
           document.getElementById('taskModal').close();
           loadTasks();
         } catch (error) {
           console.error('Error saving task:', error);
-          alert('Failed to save task');
+          alert(error.message);
         }
       }
 
+      // Deletes a task after confirmation.
       async function deleteTask(id) {
         if (!confirm('Delete this task?')) return;
         try {
-          const token = localStorage.getItem('auth_token');
-          const response = await fetch(`/api/tasks/${id}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (!response.ok) throw new Error('Failed to delete task');
+          const response = await apiFetch(`/api/tasks/${id}`, { method: 'DELETE' });
+          if (!response.ok) throw new Error(await responseError(response, 'Failed to delete task'));
           loadTasks();
         } catch (error) {
           console.error('Error deleting task:', error);
-          alert('Failed to delete task');
+          alert(error.message);
         }
       }
 
+      // Clears the saved token and returns to the login page.
       function logout() {
         localStorage.removeItem('auth_token');
         window.location.href = '/login.html';
       }
 
-      // Load tasks on page load
       document.addEventListener('DOMContentLoaded', () => {
-        const token = localStorage.getItem('auth_token');
-        if (!token) window.location.href = '/login.html';
+        if (!localStorage.getItem('auth_token')) {
+          window.location.href = '/login.html';
+          return;
+        }
         loadTasks();
       });
     </script>

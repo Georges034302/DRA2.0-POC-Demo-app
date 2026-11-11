@@ -57,9 +57,9 @@ flowchart LR
 graph LR
     subgraph Runtime["<b>Runtime Application</b>"]
         Browser["<b>Browser</b><br/>Access"]
-        Frontend["<b>Frontend</b><br/>Nginx + Flask"]
+        Frontend["<b>Frontend</b><br/>Nginx"]
         Backend["<b>Backend</b><br/>Flask API"]
-        Database["<b>Database</b><br/>SQLite"]
+        Database["<b>Database</b><br/>CRUD API + SQLite"]
         Browser -->|HTTPS| Frontend
         Frontend -->|Internal| Backend
         Backend -->|Internal| Database
@@ -96,7 +96,7 @@ The app is intentionally minimal — a simple task tracker to have *something to
 - Login with demo credentials
 - Create, read, delete tasks
 - Simple HTML UI (no framework, no fancy design)
-- SQLite storage
+- Database microservice (CRUD API over SQLite)
 
 **Purpose:** Proves the governance pipeline works with a real (if simple) application.
 
