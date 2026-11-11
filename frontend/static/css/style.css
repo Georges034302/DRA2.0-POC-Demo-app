@@ -214,3 +214,181 @@ button {
     width: 95%;
   }
 }
+
+/* ============================================================================
+   KANBAN BOARD STYLES
+   ============================================================================ */
+
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+  padding: 0.5rem;
+  min-height: 600px;
+}
+
+.kanban-column {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s ease;
+}
+
+.kanban-column:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Column header with title and task count */
+.kanban-header {
+  background-color: var(--bg-tertiary);
+  border-bottom: 2px solid var(--accent-primary);
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kanban-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.task-count {
+  background-color: var(--accent-primary);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 2rem;
+  text-align: center;
+}
+
+/* Droppable tasks area */
+.kanban-tasks {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 400px;
+}
+
+/* Drag-over state for drop zone */
+.kanban-tasks.drag-over {
+  background-color: var(--bg-tertiary);
+  border-radius: 0.4rem;
+  opacity: 0.8;
+}
+
+/* Individual task card */
+.task-card {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.4rem;
+  padding: 0.75rem;
+  cursor: move;
+  transition: all 0.2s ease;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.task-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+}
+
+/* Dragging state */
+.task-card.dragging {
+  opacity: 0.5;
+  transform: rotate(5deg);
+}
+
+/* Task card content */
+.task-card-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  word-break: break-word;
+  cursor: pointer;
+}
+
+.task-card-title:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.task-card-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-card-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.task-card-meta span {
+  background-color: var(--bg-tertiary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.2rem;
+}
+
+/* Delete button on task card */
+.task-delete-btn {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  padding: 0.25rem;
+  transition: color 0.2s ease;
+}
+
+.task-delete-btn:hover {
+  color: var(--accent-error);
+}
+
+/* Responsive: stack columns on mobile */
+@media (max-width: 768px) {
+  .kanban-board {
+    grid-template-columns: 1fr;
+  }
+
+  .kanban-tasks {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .kanban-header h3 {
+    font-size: 0.95rem;
+  }
+
+  .kanban-tasks {
+    padding: 0.75rem;
+  }
+
+  .task-card {
+    padding: 0.5rem;
+  }
+}

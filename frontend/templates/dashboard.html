@@ -24,8 +24,40 @@
         <button type="button" onclick="openNewTaskForm()" class="btn-primary">➕ New Task</button>
       </div>
 
-      <div id="tasksContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
-        <p style="color: var(--text-secondary);">Loading tasks...</p>
+      <!-- Kanban Board: 3 columns for TODO, In Progress, Done -->
+      <div id="kanbanBoard" class="kanban-board">
+        <!-- TODO Column -->
+        <div class="kanban-column" data-status="pending">
+          <div class="kanban-header">
+            <h3>📋 To Do</h3>
+            <span class="task-count" id="count-pending">0</span>
+          </div>
+          <div class="kanban-tasks" id="tasks-pending">
+            <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">Loading...</p>
+          </div>
+        </div>
+
+        <!-- In Progress Column -->
+        <div class="kanban-column" data-status="in_progress">
+          <div class="kanban-header">
+            <h3>🔄 In Progress</h3>
+            <span class="task-count" id="count-in_progress">0</span>
+          </div>
+          <div class="kanban-tasks" id="tasks-in_progress">
+            <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Done Column -->
+        <div class="kanban-column" data-status="done">
+          <div class="kanban-header">
+            <h3>✅ Done</h3>
+            <span class="task-count" id="count-done">0</span>
+          </div>
+          <div class="kanban-tasks" id="tasks-done">
+            <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">Loading...</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -42,7 +74,7 @@
             <option value="high">High Priority</option>
           </select>
           <select id="taskStatus" name="status" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: 0.25rem; background: var(--bg-primary); color: var(--text-primary);">
-            <option value="todo">To do</option>
+            <option value="pending">To do</option>
             <option value="in_progress">In progress</option>
             <option value="done">Done</option>
           </select>
@@ -52,154 +84,6 @@
     </dialog>
 
     <script src="/static/js/app.js"></script>
-    <script>
-      // Calls the API with the saved token; a rejected token sends the user back to login.
-      async function apiFetch(url, options = {}) {
-        const token = localStorage.getItem('auth_token');
-        const response = await fetch(url, {
-          ...options,
-          headers: { ...options.headers, 'Authorization': `Bearer ${token}` }
-        });
-        if (response.status === 401) {
-          logout();
-          throw new Error('Session expired, please log in again');
-        }
-        return response;
-      }
-
-      // Reads the message from a failed API response, falling back to a default.
-      async function responseError(response, fallback) {
-        const body = await response.json().catch(() => ({}));
-        return body.message || fallback;
-      }
-
-      // Fetches all tasks and renders them.
-      async function loadTasks() {
-        try {
-          const response = await apiFetch('/api/tasks');
-          if (!response.ok) throw new Error(await responseError(response, 'Failed to load tasks'));
-          renderTasks(await response.json());
-        } catch (error) {
-          console.error('Error loading tasks:', error);
-          document.getElementById('tasksContainer').innerHTML = '<p style="color: var(--text-secondary);">Error loading tasks</p>';
-        }
-      }
-
-      // Draws one card per task, or an empty-state message.
-      function renderTasks(tasks) {
-        const container = document.getElementById('tasksContainer');
-        if (tasks.length === 0) {
-          container.innerHTML = '<p style="color: var(--text-secondary);">No tasks yet. Create one to get started!</p>';
-          return;
-        }
-        container.innerHTML = tasks.map(task => `
-          <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 0.5rem; border-left: 4px solid ${getPriorityColor(task.priority)};">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-              <h3 style="margin: 0; color: var(--text-primary);">${escapeHtml(task.title)}</h3>
-              <span style="background: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(task.status)}</span>
-            </div>
-            <p style="margin: 0 0 1rem 0; color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(task.description)}</p>
-            <div style="display: flex; gap: 0.5rem;">
-              <button type="button" onclick="editTask(${task.id})" style="padding: 0.5rem 1rem; background: var(--bg-tertiary); border: none; border-radius: 0.25rem; cursor: pointer; color: var(--text-primary); font-size: 0.9rem;">Edit</button>
-              <button type="button" onclick="deleteTask(${task.id})" style="padding: 0.5rem 1rem; background: rgba(255,0,0,0.2); border: none; border-radius: 0.25rem; cursor: pointer; color: #ff6b6b; font-size: 0.9rem;">Delete</button>
-            </div>
-          </div>
-        `).join('');
-      }
-
-      // Maps a task priority to its card border color.
-      function getPriorityColor(priority) {
-        const colors = { low: '#4ade80', medium: '#f59e0b', high: '#ef4444' };
-        return colors[priority] || '#888';
-      }
-
-      // Escapes text so it is safe to insert into HTML.
-      function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-      }
-
-      // Opens the dialog with an empty form for a new task.
-      function openNewTaskForm() {
-        document.getElementById('taskId').value = '';
-        document.getElementById('taskTitle').value = '';
-        document.getElementById('taskDesc').value = '';
-        document.getElementById('taskPriority').value = 'medium';
-        document.getElementById('taskStatus').value = 'todo';
-        document.getElementById('taskModal').showModal();
-      }
-
-      // Loads a task into the dialog for editing.
-      async function editTask(id) {
-        try {
-          const response = await apiFetch(`/api/tasks/${id}`);
-          if (!response.ok) throw new Error(await responseError(response, 'Failed to load task'));
-          const task = await response.json();
-          document.getElementById('taskId').value = task.id;
-          document.getElementById('taskTitle').value = task.title;
-          document.getElementById('taskDesc').value = task.description;
-          document.getElementById('taskPriority').value = task.priority;
-          document.getElementById('taskStatus').value = task.status;
-          document.getElementById('taskModal').showModal();
-        } catch (error) {
-          console.error('Error loading task:', error);
-          alert(error.message);
-        }
-      }
-
-      // Creates a new task or updates the one open in the dialog.
-      async function saveTask(event) {
-        event.preventDefault();
-        const id = document.getElementById('taskId').value;
-        const taskData = {
-          title: document.getElementById('taskTitle').value,
-          description: document.getElementById('taskDesc').value,
-          priority: document.getElementById('taskPriority').value,
-          status: document.getElementById('taskStatus').value
-        };
-
-        try {
-          const response = await apiFetch(id ? `/api/tasks/${id}` : '/api/tasks', {
-            method: id ? 'PATCH' : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(taskData)
-          });
-          if (!response.ok) throw new Error(await responseError(response, 'Failed to save task'));
-          document.getElementById('taskModal').close();
-          loadTasks();
-        } catch (error) {
-          console.error('Error saving task:', error);
-          alert(error.message);
-        }
-      }
-
-      // Deletes a task after confirmation.
-      async function deleteTask(id) {
-        if (!confirm('Delete this task?')) return;
-        try {
-          const response = await apiFetch(`/api/tasks/${id}`, { method: 'DELETE' });
-          if (!response.ok) throw new Error(await responseError(response, 'Failed to delete task'));
-          loadTasks();
-        } catch (error) {
-          console.error('Error deleting task:', error);
-          alert(error.message);
-        }
-      }
-
-      // Clears the saved token and returns to the login page.
-      function logout() {
-        localStorage.removeItem('auth_token');
-        window.location.href = '/login.html';
-      }
-
-      document.addEventListener('DOMContentLoaded', () => {
-        if (!localStorage.getItem('auth_token')) {
-          window.location.href = '/login.html';
-          return;
-        }
-        loadTasks();
-      });
-    </script>
+    
   </body>
 </html>
