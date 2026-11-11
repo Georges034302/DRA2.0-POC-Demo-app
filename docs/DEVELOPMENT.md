@@ -1,276 +1,190 @@
-# Development Guide — Release Governance POC
+# Development Guide
 
-## Focus: Governance Pipeline, Not Application Features
+## Project Focus
 
-This POC proves that a broker-based policy engine can control deployments through:
-1. Evidence collection from builds
-2. Policy-based review decisions
-3. Human approval gates
-4. Immutable deployment (reviewed digests only)
-5. Post-deployment verification
+This POC demonstrates a broker-based policy engine controlling deployments through:
+- Evidence collection from CI/CD pipelines
+- Policy-based review decisions
+- Human approval gates
+- Immutable deployments (reviewed image digests only)
+- Post-deployment verification with stricter policies
 
-**The application is intentionally minimal.** All effort goes to the governance pipeline.
-
-## What We're Building
-
-### The Application (20% effort)
-A minimal task tracker:
-- Simple SQLite schema (tasks table)
-- Basic Flask REST API (create, list, delete)
-- Plain HTML form (no fancy UI)
-- Demo authentication (credentials from .env)
-- Enough to have something real to deploy
-
-### The Governance Pipeline (80% effort)
-- Build automation (test, build, publish images with digests)
-- Evidence collection (code, dependencies, logs)
-- Broker integration (policy review, decisions)
-- Approval gates (human decision routing)
-- Immutable deployment (digest-based, no rebuilds)
-- Post-deployment verification (state check, stricter policy)
+**Application is intentionally minimal** — focus is on the governance pipeline, not features.
 
 ## Development Phases
 
-### Phase 1: Minimal App
-Create a simple, working application:
-- Database: Task model (id, title, status)
-- API: GET /tasks, POST /tasks, DELETE /tasks/:id
-- Frontend: HTML form + list view
-- Docker: Dockerfile for each service
-- Local: docker-compose.yml
-
-**Deliverable:** App works locally, API responds, tasks can be created/deleted
-
-### Phase 2: CI/CD Pipeline
-Build the governance infrastructure:
-- GitHub Actions workflow (ci-cd.yml)
-- Test stage (pytest)
-- Build stage (docker images)
-- Publish stage (digest tracking)
-- Evidence collection script (review.sh)
-- Deploy script (deploy.sh)
-
-**Deliverable:** Pipeline runs, builds images, publishes digests, collects evidence
-
-### Phase 3: Broker Integration
-Connect evidence to policy decisions:
-- Broker invocation (mock or real)
-- Policy evaluation (PASS/FAIL/APPROVAL_REQUIRED/ERROR)
-- Evidence formatting (JSON schema)
-- Decision routing (gate decisions)
-- Approval gate setup (GitHub environment)
-
-**Deliverable:** Broker can be called, decisions are enforced, approvals work
-
-### Phase 4: Deployment & Verification
-Complete the governance flow:
-- Immutable deployment (deploy by digest, no rebuild)
-- Post-deployment workflow (post-deployment.yml)
-- Evidence re-collection
-- Post-deployment broker invocation (stricter policy)
-- Verification reporting
-
-**Deliverable:** Full end-to-end flow works, from build to post-deploy
-
-### Phase 5: Polish & Documentation
-Finalize for demo:
-- Tests and quality gates
-- Error handling
-- Documentation updates
-- Troubleshooting guide
-- Demo readiness
-
-**Deliverable:** Ready to demo the governance pipeline
+| Phase | Focus | Deliverable |
+|-------|-------|-------------|
+| 1 | Minimal working app | docker-compose up works, CRUD operations functional |
+| 2 | CI/CD automation | GitHub Actions pipeline builds, tests, publishes images with digests |
+| 3 | Broker integration | Policy evaluation, approval gates, decision enforcement |
+| 4 | Deployment & verification | Immutable deployment by digest, post-deploy checks with stricter policy |
+| 5 | Polish & documentation | Tests, security checks, documentation, demo-ready |
 
 ## Technology Stack
 
-**Application:**
-- Flask (Python 3.12+)
-- SQLite
-- Nginx (reverse proxy)
-- Plain HTML (no framework)
+- **Frontend:** Nginx (reverse proxy, static assets)
+- **Backend:** Flask (REST API with Bearer token auth)
+- **Database:** Flask + SQLite (CRUD API, persistent storage)
+- **Orchestration:** Docker & Docker Compose
+- **CI/CD:** GitHub Actions
+- **Testing:** pytest, flake8, Bandit
 
-**Governance:**
-- GitHub Actions
-- Docker & Docker Compose
-- Bash scripts
-- Broker API (external service)
-
-**Testing:**
-- pytest
-- flake8
-- Bandit (security)
-
-## Application Structure
+## Project Structure
 
 ```
-frontend/
-  ├─ Dockerfile
-  ├─ nginx.conf (serves the UI, proxies /api to the backend)
-  ├─ templates/
-  │  ├─ login.html
-  │  └─ dashboard.html
-  └─ static/
-     ├─ css/style.css
-     └─ js/app.js (theme toggle)
-
-backend/
-  ├─ Dockerfile
-  ├─ requirements.txt (Flask, requests)
-  ├─ app.py (Flask API, calls the database service)
-  └─ tests/
-     └─ test_tasks.py
-
-database/
-  ├─ Dockerfile
-  ├─ requirements.txt (Flask, gunicorn)
-  ├─ init-db.py (create database, load initial data)
-  ├─ app.py (CRUD API for the backend)
-  └─ tests/
-     └─ test_database.py
-
-scripts/
-  ├─ build.sh (test, build, publish)
-  ├─ review.sh (collect evidence, invoke broker)
-  ├─ deploy.sh (deploy by digest)
-  └─ post-deploy.sh (verification)
-
-.github/workflows/
-  ├─ ci-cd.yml (build, test, review, deploy)
-  └─ post-deployment.yml (verification)
+DRA2.0-POC-Demo-app/
+├─ frontend/
+│  ├─ Dockerfile
+│  ├─ nginx.conf
+│  ├─ templates/
+│  │  ├─ login.html
+│  │  └─ dashboard.html
+│  └─ static/
+│     ├─ css/style.css
+│     └─ js/app.js
+├─ backend/
+│  ├─ Dockerfile
+│  ├─ requirements.txt
+│  ├─ app.py (REST API + Bearer token auth)
+│  └─ tests/
+│     └─ test_tasks.py
+├─ database/
+│  ├─ Dockerfile
+│  ├─ requirements.txt
+│  ├─ app.py (CRUD API + X-Internal-Token auth)
+│  ├─ init-db.py (create schema, load seed data)
+│  └─ tests/
+│     └─ test_database.py
+├─ scripts/
+│  ├─ setup.sh (environment setup)
+│  ├─ env-setup.sh (configure .env variables)
+│  ├─ build.sh (test, build Docker images)
+│  ├─ review.sh (collect evidence for broker)
+│  ├─ deploy.sh (deploy using image digest)
+│  ├─ post-deploy.sh (post-deployment verification)
+│  ├─ validate.sh (syntax and security checks)
+│  └─ cleanup.sh (remove containers, volumes)
+├─ .github/workflows/
+│  ├─ ci-cd.yml (GitHub Actions: test → build → publish)
+│  └─ post-deployment.yml (post-deployment verification)
+├─ docs/
+│  ├─ architecture.md (system diagrams & design)
+│  ├─ DEVELOPMENT.md (this file)
+│  ├─ USAGE.md (quick start guide)
+│  ├─ broker.md (broker API reference)
+│  ├─ operations.md (operational tasks)
+│  ├─ glossary.md (terminology)
+│  ├─ CONTRIBUTING.md (contribution guidelines)
+│  └─ index.MD (documentation index)
+├─ docker-compose.yml (local dev environment)
+├─ .env.example (environment variables template)
+├─ .gitignore
+└─ README.md
 ```
+
+## Development Workflow
+
+### Local Development
+```
+1. Make code changes
+2. Run: docker-compose up --build
+3. Test locally: http://localhost:8080
+4. Run unit tests: pytest
+5. Commit and push
+```
+
+### CI/CD Pipeline (GitHub Actions)
+```
+1. Test: Run pytest
+2. Build: Docker images with digest tracking
+3. Publish: Push images to registry
+4. Evidence: Collect code diff, dependencies, test results, build logs
+5. Broker Review: Evaluate policies against evidence
+6. Policy Decision: PASS / FAIL / APPROVAL_REQUIRED / ERROR
+7. Approval Gate: If APPROVAL_REQUIRED, route to human review
+8. Deploy: Approved digest deployed (no rebuild)
+9. Post-Deploy: Collect runtime evidence, verify with stricter policy
+```
+
+### Evidence Collection
+
+**Collected at Build Time:**
+- Source code diff
+- Dependencies and versions
+- Test results
+- Build logs
+- Container image digest (SHA256)
+
+**Collected After Deployment:**
+- Runtime configuration
+- System metrics
+- Application logs
+- Service health
+- Security scan results
+
+## Policy Decision Outcomes
+
+| Exit Code | Outcome | Action |
+|-----------|---------|--------|
+| 0 | PASS | Deploy |
+| 10 | FAIL | Block (no approval) |
+| 20 | APPROVAL_REQUIRED | Route to human review |
+| 30 | ERROR | Block (validation failure) |
+
+**Post-deployment uses stricter policy:** Medium/High/Critical findings trigger FAIL instead of APPROVAL_REQUIRED.
+
+## Key Principles
+
+**Immutable Deployments:** Broker approves the image digest (SHA256), not code. Deployment uses exact approved digest—no rebuild means what was reviewed is what runs.
+
+**Evidence-Driven Decisions:** Policies evaluate concrete evidence collected from CI/CD and runtime. Reproducible, auditable, no guessing.
+
+**Two-Tier Policy:** Pre-deploy routes medium findings to approval. Post-deploy fails on medium/high/critical findings (no approval gate).
 
 ## Success Criteria
 
-### Phase 1: Application Works
-- [ ] `docker-compose up --build` succeeds
-- [ ] Can login with demo credentials
-- [ ] Can create task
-- [ ] Can list tasks
-- [ ] Can delete task
-- [ ] Data persists across restarts
+### Phase 1
+- [x] docker-compose up succeeds
+- [x] Login with demo credentials works
+- [x] CRUD operations work (create, read, update, delete)
+- [x] Data persists across container restarts
 
-### Phase 2: Pipeline Works
-- [ ] GitHub Actions workflow runs
-- [ ] Tests pass (pytest)
-- [ ] Docker images build cleanly
-- [ ] Images are published with digests
-- [ ] Evidence is collected in JSON
+### Phase 2
+- [ ] GitHub Actions CI/CD runs
+- [ ] Tests pass automatically
+- [ ] Docker images build and publish with digests
+- [ ] Evidence collected in JSON format
 
-### Phase 3: Broker Integration Works
-- [ ] Broker can be invoked with evidence
-- [ ] Policy decisions are returned (PASS/FAIL/APPROVAL_REQUIRED)
-- [ ] Decisions are enforced (block/approve/deploy)
-- [ ] Approval gate routing works
-- [ ] Human can approve/reject
+### Phase 3
+- [ ] Broker invocation works with evidence payload
+- [ ] Policy decisions returned correctly (PASS/FAIL/APPROVAL_REQUIRED/ERROR)
+- [ ] Approval gate routing functional
+- [ ] Decisions enforced (block/approve/deploy)
 
-### Phase 4: Deployment Works
-- [ ] Approved digests are deployed
-- [ ] No rebuild occurs (digest used directly)
+### Phase 4
+- [ ] Deployments use approved digest only
+- [ ] No image rebuild after approval
 - [ ] Post-deployment workflow runs
-- [ ] Post-deployment evidence collected
-- [ ] Stricter post-deploy policy applied
+- [ ] Post-deployment policy correctly blocks/approves
 
-### Phase 5: Ready to Demo
+### Phase 5
 - [ ] All tests passing
-- [ ] Linting/security checks passing
-- [ ] Complete documentation
-- [ ] Runbook for operators
+- [ ] Linting and security checks passing
+- [ ] Documentation complete
 - [ ] Demo scenario documented
 
-## Key Implementation Notes
+## Important Notes
 
-### Evidence Collection
-Evidence includes:
-- Source code diff
-- Dependencies (requirements.txt, etc.)
-- Test results
-- Build logs
-- Image metadata
-
-Format: JSON with explicit paths (no absolute paths, no `../`)
-
-### Policy Outcomes
-- `PASS` (0): Proceed to other checks
-- `FAIL` (10): Block release
-- `APPROVAL_REQUIRED` (20): Route to approval gate
-- `ERROR` (30): Block release (validation/provider failure)
-
-### Post-Deployment Policy (Stricter)
-- `CRITICAL/HIGH/MEDIUM` findings → FAIL
-- (vs. pre-deploy: `MEDIUM` → APPROVAL_REQUIRED)
-
-### Immutable Deployment
-- Image digest from approved build
-- No rebuild after approval
-- Exactly what was reviewed runs in production
-
-## Deployment Workflow
-
-```
-Local Development
-    ↓
-git push → GitHub Actions
-    ├─ Test
-    ├─ Build (publish digest)
-    ├─ Collect evidence
-    ├─ Broker review (pre-deploy)
-    ↓
-Policy Decision
-    ├─ PASS → proceed
-    ├─ FAIL → block
-    └─ APPROVAL_REQUIRED → human gate
-    ↓
-Approval Gate (if needed)
-    ├─ Human reviews findings
-    ├─ Approves or rejects
-    ↓
-Deployment
-    ├─ Deploy reviewed digest (no rebuild)
-    ↓
-Post-Deployment Verification
-    ├─ Collect state evidence
-    ├─ Broker review (post-deploy, stricter)
-    ├─ Verify or fail
-    ↓
-Done
-```
-
-## Testing Strategy
-
-### Unit Tests
-- Model CRUD
-- API endpoints
-- Validation logic
-
-### Integration Tests
-- Full request cycles
-- Database transactions
-- Authentication flow
-
-### Governance Tests
-- Evidence collection correctness
-- Broker invocation format
-- Decision enforcement
-- Approval routing
-
-## Important: This Is Not Production
-
-- POC-quality code
+- POC-grade code, not production-ready
 - Demo-grade security
-- Not for enterprise use
-- Acceptable for governance proof-of-concept
+- Focus on governance pipeline, not application features
+- Phase 1 complete
 
-## Questions?
+## References
 
-Refer to:
-1. [Architecture & Release Flow](docs/architecture.md)
-2. [Broker Reference](docs/broker.md)
-3. [Operations Guide](docs/operations.md)
-4. [Getting Started](docs/USAGE.MD)
-
----
-
-**Status:** Phase 1 complete
-
-**Next:** Begin Phase 2 — CI/CD Pipeline
+- [Architecture & System Diagrams](./architecture.md)
+- [Broker Specification](./broker.md)
+- [Operations Guide](./operations.md)
+- [Quick Start](./USAGE.md)
+- [Glossary](./glossary.md)
