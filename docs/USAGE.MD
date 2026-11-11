@@ -1,85 +1,69 @@
-# Usage
+# Quick Start
 
-- Execution, testing, and deployment require prior written permission under the [license](../LICENSE).
-- Run commands from the repository root.
+**License:** Proprietary. Prior written permission required.
 
-## Run Locally
+**Run from:** Repository root.
 
-**Requirements:** Docker Engine and Docker Compose.
+## Local Setup
 
+**Prerequisites:** Docker Engine and Docker Compose.
+
+**Steps:**
 ```sh
 cp .env.example .env
-```
+# Edit .env: set DEMO_USERNAME, DEMO_PASSWORD, SECRET_KEY, INTERNAL_API_TOKEN
 
-- In `.env`, set strong, unique values for `INTERNAL_API_TOKEN`, `DEMO_USERNAME`, and `DEMO_PASSWORD`.
-- Never commit `.env`.
-
-```sh
 docker compose up --build
+
+# Verify (in another terminal):
+curl -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo","password":"password123"}'
 ```
 
-Open [http://localhost](http://localhost) and sign in with your configured credentials.
+**Access:** http://localhost:8080
+
+**Stop:** `docker compose down` (keep data) or `docker compose down -v` (delete data)
+
+## Testing
+
+**Prerequisites:** Python 3.12, pytest, flake8, bandit.
 
 ```sh
-curl http://localhost/health
-```
+pip install -r backend/requirements.txt -r database/requirements.txt pytest flake8 bandit
 
-- SQLite data persists in a named volume. `docker compose down` stops the app; adding `-v` deletes its data.
-
-## Test and Build
-
-**Requirements:** Python 3.12 and Docker.
-
-```sh
-python -m pip install \
-  -r frontend/requirements.txt \
-  -r backend/requirements.txt \
-  -r database/requirements.txt
-python -m pytest frontend/tests backend/tests database/tests -q
+pytest backend/tests database/tests -v
 bash -n scripts/*.sh
 bash scripts/build.sh
 ```
 
-## Azure Scripts
+## CI/CD Release Workflow
 
-- Use the repository scripts for Azure provisioning, publishing, and deployment.
-- This section references scripts; it is not an Azure setup walkthrough.
-- **Tools:** Git, Docker, Python 3.12, Azure CLI, and GitHub CLI.
-- **Access:** An authorized Azure session and access to the private broker image.
-- Required environment variables are declared in each script.
-- Variable and secret mappings are in the [release workflow](../.github/workflows/ci-cd.yml) and [post-deployment workflow](../.github/workflows/post-deployment.yml).
+**Dispatch:** Manual only via GitHub Actions UI (no automatic runs on main).
 
-| Step | Script | Responsibility |
-| --- | --- | --- |
-| Provision | [setup.sh](../scripts/setup.sh) | Validate prerequisites and call [env-setup.sh](../scripts/env-setup.sh) to create the resource group, ACR, and Container Apps environment. |
-| Build | [build.sh](../scripts/build.sh) | Build the three application images locally. With `--publish`, build and push to ACR, then save immutable digests in `BUILD_MANIFEST`. |
-| Review | [review.sh](../scripts/review.sh) | Prepare pre-deployment evidence and invoke the pinned AI-Broker image. |
-| Deploy | [deploy.sh](../scripts/deploy.sh) | Deploy the manifest's image digests for `GITHUB_SHA` to Container Apps without rebuilding. |
-| Verify | [post-deploy.sh](../scripts/post-deploy.sh) | Collect revision, log, and health evidence, then run a separate post-deployment broker scan. |
+**Stages:**
+1. Test
+2. Build images (publish with `--publish`)
+3. Collect evidence (redacted)
+4. Broker review (pre-deployment)
+5. Approval gate if APPROVAL_REQUIRED (human review)
+6. Deploy (approved digest, no rebuild)
+7. Post-deployment workflow collects evidence and runs stricter policy
 
-- Configure Azure OIDC federation and workflow permissions separately.
-- Deployment may need permission to assign `AcrPull` roles.
-- Pin `BROKER_IMAGE_DIGEST` to an approved GHCR digest.
-- Provide a GHCR token with `read:packages` access.
-- Store provider keys and application credentials in protected secrets.
-- Use the release workflow for gated deployment; the deployment script alone does not enforce broker review or human approval.
+**Outcomes:**
+- `PASS` (0): Deploy
+- `FAIL` (10): Block
+- `APPROVAL_REQUIRED` (20): Route to `dra-approval` environment
+- `ERROR` (30): Block
 
-## Release Review
+**Approval:** Protected GitHub environment (`dra-approval`) with required reviewers.
 
-- Manually dispatch the [release workflow](../.github/workflows/ci-cd.yml) to test, publish, review, and deploy.
-- Automatic runs on pushes to `main` are currently disabled.
-- `FAIL` and `ERROR` block release.
-- `APPROVAL_REQUIRED` needs human approval through the protected `dra-approval` environment and `APPROVAL_GATE_ENABLED=true`.
-- Configure required reviewers before enabling approval-based releases.
-- All other required checks must also pass.
-- The separate [post-deployment workflow](../.github/workflows/post-deployment.yml) verifies deployment and retains evidence for 30 days.
-- AI-Broker scans evidence and reports policy outcomes only.
-- It does not build, deploy, roll back, or provide continuous monitoring.
+## Important Notes
 
-## Limitations
+- Never commit `.env`
+- Never include secrets in evidence
+- Data does not persist across container restarts in Azure (configure volume for production)
+- Broker is external; does not build, deploy, rollback, or monitor
+- Results are findings, not verified vulnerabilities
 
-- Azure deployment does not configure persistent SQLite storage. Database container restarts or replacement may lose data.
-- Review evidence is sent to an external model provider. Never include secrets in code changes or evidence.
-- The private AI-Broker is maintained separately and is not included in this repository.
-
-[Documentation index](index.MD)
+[Docs Index](index.MD)

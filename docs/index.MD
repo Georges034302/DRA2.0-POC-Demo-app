@@ -1,132 +1,67 @@
 # Documentation Index
 
-Complete reference for the DRA 2.0 POC Demo Application.
+DRA 2.0 POC — Release Governance Demo
 
-**Status:** Proprietary proof of concept. Not open to external contributions. Prior written permission required for any use beyond internal evaluation.
-
----
+**Status:** Proprietary. Prior written permission required for any use.
 
 ## Quick Navigation
 
-| Document | Purpose | Audience |
-|----------|---------|----------|
-| **[README](../README.md)** | Project overview, quick start, at-a-glance architecture | Everyone |
-| **[Development Guide](DEVELOPMENT.md)** | Implementation phases, success criteria, development roadmap | Developers, engineers |
-| **[Architecture](architecture.md)** | Complete release governance flow, broker integration, exit codes | Engineers, architects |
-| **[Broker Reference](broker.md)** | Policy evaluation, review modes, result format, redaction | Operators, reviewers |
-| **[Operations](operations.md)** | Azure deployment, security, troubleshooting, performance | DevOps, operators |
-| **[Getting Started](USAGE.MD)** | Local setup, Docker Compose, Azure scripts, validation | Developers |
-| **[Glossary](glossary.md)** | Terminology and definitions | Reference |
-
----
+| Document | Purpose |
+|----------|---------|
+| [Quick Start](USAGE.MD) | Local setup, testing, CI/CD workflow |
+| [Development Guide](DEVELOPMENT.md) | Implementation phases, success criteria |
+| [Architecture](architecture.md) | System design, broker flow, exit codes |
+| [Operations](operations.md) | Setup, deployment, troubleshooting |
+| [Broker Spec](broker.md) | Policy evaluation, review modes, results |
+| [Glossary](glossary.md) | Terminology reference |
 
 ## Common Tasks
 
-### Getting Started
+**Get running:** [Quick Start > Local Setup](USAGE.MD#local-setup)
 
-- **Run locally:** [Getting Started > Run Locally](USAGE.MD#run-locally)
-- **Test the application:** [Getting Started > Test and Build](USAGE.MD#test-and-build)
-- **Deploy to Azure:** [Operations > Azure Deployment](operations.md#azure-deployment)
+**Understand the system:** [Architecture](architecture.md) | [Broker Spec](broker.md)
 
-### Understanding the System
+**Deploy:** [Operations > Setup & Prerequisites](operations.md#setup--prerequisites)
 
-- **How release governance works:** [Architecture](architecture.md)
-- **What the Broker does:** [Broker Reference](broker.md)
-- **Pre/Post-deployment review:** [Broker > Review Modes](broker.md#review-modes)
-- **Policy outcomes:** [Broker > Exit Codes](broker.md#exit-codes--outcomes)
-- **Development roadmap:** [Development Guide](DEVELOPMENT.md)
+**Troubleshoot:** [Operations > Troubleshooting](operations.md#troubleshooting)
 
-### Deployment & Operations
-
-- **Secure credential handling:** [Operations > Security](operations.md#security--evidence-management)
-- **Broker configuration:** [Operations > Broker Image Security](operations.md#broker-image-security)
-- **Troubleshoot issues:** [Operations > Troubleshooting](operations.md#troubleshooting)
-- **Performance guidelines:** [Operations > Performance](operations.md#performance-considerations)
-
-### Reference
-
-- **Find a term:** [Glossary](glossary.md)
-- **View policy details:** [AI-Broker > Policy Evaluation](broker.md#policy-evaluation)
-- **Check system boundaries:** [Architecture > Broker Boundary](architecture.md#broker-boundary)
-
----
+**Find a term:** [Glossary](glossary.md)
 
 ## Key Concepts
 
-**Release Governance:** Automated policy-driven release gates using Broker evidence review and human-controlled approvals.
+**Release Governance:** Policy-driven release gates using evidence review and human approval.
 
-**Broker:** External policy engine that analyzes code and deployment evidence, returning deterministic outcomes (PASS/FAIL/APPROVAL_REQUIRED/ERROR).
+**Broker:** External policy engine analyzing code and deployment evidence, returns PASS/FAIL/APPROVAL_REQUIRED/ERROR.
 
-**Immutable Digests:** Application images are reviewed by SHA256 digest and deployed without rebuilding.
+**Immutable Digests:** Images reviewed by SHA256 digest; deployment uses exact reviewed digest (no rebuild).
 
-**Pre-Deployment Review:** Analyzes code changes before release; can block, require approval, or pass.
+**Pre-Deployment Review:** Analyzes changes before release; can block, require approval, or pass.
 
-**Post-Deployment Verification:** Analyzes deployed state after release; can verify or flag issues (no automatic rollback).
+**Post-Deployment Verification:** Analyzes deployed state; cannot automatically rollback.
 
-**Evidence Redaction:** Sensitive data must be pre-filtered before broker analysis to protect credentials and PII.
-
-**Approval Gate:** Protected GitHub environment requiring human review and approval for medium-severity findings.
-
-See **[Glossary](glossary.md)** for complete terminology reference.
-
----
+**Evidence Redaction:** Remove API keys, credentials, and PII before broker analysis.
 
 ## Repository Structure
 
 ```
-frontend/               # Nginx reverse proxy and static UI
-backend/                # Flask REST API, task validation
-database/               # CRUD API, SQLite persistence
-scripts/                # Automation: build, review, deploy, verify
-  ├─ setup.sh          # Azure infrastructure provisioning
-  ├─ build.sh          # Build and publish images
-  ├─ review.sh         # Prepare evidence, invoke broker
-  ├─ deploy.sh         # Deploy reviewed digests
-  └─ post-deploy.sh    # Post-deployment verification
-.github/workflows/      # GitHub Actions automation
-  ├─ ci-cd.yml         # Release pipeline
-  └─ post-deployment.yml   # Post-deployment verification
-docs/                   # Complete documentation (you are here)
-  ├─ index.MD          # Navigation hub
-  ├─ README.md         # Project overview
-  ├─ architecture.md   # Release governance flow
-  ├─ broker.md         # AI-Broker reference
-  ├─ operations.md     # Deployment and operations
-  ├─ USAGE.MD          # Getting started
-  ├─ CONTRIBUTING.md   # Contribution policy
-  └─ glossary.md       # Terminology
+frontend/             # Nginx reverse proxy, static UI
+backend/              # Flask REST API
+database/             # CRUD API, SQLite
+scripts/              # build.sh, review.sh, deploy.sh, post-deploy.sh
+.github/workflows/    # ci-cd.yml, post-deployment.yml
+docs/                 # Documentation (you are here)
 ```
 
----
+## Important Notes
 
-## Security & Compliance
-
-- **Credentials:** All secrets stored in protected GitHub Actions variables
-- **Evidence Redaction:** Pre-filter sensitive data before broker analysis
-- **Audit Trail:** Results retained for 30 days for investigation
-- **Approval Gates:** Configurable human review via protected GitHub environments
-- **Immutable Deployment:** Reviewed image digests prevent post-deployment tampering
+- **Not for Production:** POC only
+- **Data Persistence:** Not configured in deployments; configure volume for production
+- **Broker External:** Maintained separately; does not build, deploy, or rollback
+- **Results:** Findings, not verified vulnerabilities
+- **Credentials:** Never commit `.env` or include in evidence
 
 ---
 
-## Important Limitations
+**License:** Proprietary. See [LICENSE](../LICENSE).
 
-- **Not for Production:** POC only; not hardened for production use
-- **No Rollback:** Post-deployment verification cannot trigger automatic rollback
-- **Data Persistence:** Azure deployment does not configure persistent database storage
-- **Broker is External:** Maintained separately; not included in this repository
-- **Model Findings:** AI-generated recommendations; not verified vulnerabilities
-
----
-
-## License
-
-**Proprietary.** Public visibility grants no usage rights. Prior written permission required from the copyright holder.
-
-See **[LICENSE](../LICENSE)** for complete terms.
-
----
-
-<p align="center">
-	<sub><span style="color:#666">DRA 2.0 POC · Release Governance Demo · Dr. Georges Bou Ghantous © 2026</span></sub>
-</p>
+© 2026 Dr. Georges Bou Ghantous
