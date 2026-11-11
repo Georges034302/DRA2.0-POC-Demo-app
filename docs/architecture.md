@@ -52,11 +52,11 @@ graph TB
 ```
 
 **Three-Container Deployment:**
-1. **Frontend** (Nginx): Reverse proxy, static assets (CSS/JS), template serving
-2. **Backend** (Flask): REST API, authentication, forwards task operations to the database service
-3. **Database** (Flask + SQLite): Microservice that creates and seeds the database (`init-db.py`) and exposes CRUD APIs (`app.py`) for the backend
+1. **Frontend** (Nginx): Reverse proxy, serves static HTML/CSS/JS, routes `/api/*` to backend
+2. **Backend** (Flask): REST API with authentication, proxies task operations to database
+3. **Database** (Flask + SQLite): CRUD API that manages task storage
 
-**Network:** All three containers use the host network (`network_mode: host`) because the development environment blocks container-to-container traffic on Docker bridge networks. Ports: frontend 80, backend 5000, database 5001. Each container has a health check. Under host networking these ports are not isolated from the host; use a bridge network where the platform allows it.
+**Networking:** Docker bridge network enables cross-container communication via service DNS. Ports: frontend 8080→80, backend 5000, database 5001. Health checks on `/health` endpoint.
 
 ## Release Governance Flow
 
@@ -163,87 +163,6 @@ Example flow:
 3. Broker evaluates policy against evidence (digest included)
 4. If approved, deployment pulls exact `sha256:abc123def456...` from registry
 5. No rebuild, no recompilation—exact image that was reviewed runs in production
-
-## System Components
-
-### Runtime Tier
-- **Application Pod**: Simple task tracker (minimal feature set)
-- **Database Service**: Flask CRUD API over SQLite (persistent volume)
-- **Nginx**: Reverse proxy and static file serving
-
-### Governance Tier
-- **CI/CD Pipeline**: GitHub Actions (test → build → publish → evidence → Broker → approval → deploy)
-- **Broker Engine**: Policy evaluation and decision making (can be mocked initially)
-- **Evidence Collector**: Gathers build artifacts, test results, container metadata
-- **Approval Gate**: Human review interface and decision routing
-- **Post-Deploy Monitor**: Collects runtime evidence and triggers stricter policy review
-
-### External Integrations
-- **Docker Registry**: Stores and serves container images by digest
-- **GitHub Actions**: Orchestrates CI/CD workflow, approval routing
-- **Broker API**: Receives evidence, returns policy decisions (exit codes)
-
-## Policy Evaluation (Simplified)
-
-The Broker evaluates evidence against policies. Example policy logic:
-
-```
-IF test_results.failures > 0 THEN
-  RETURN FAIL (exit 10)
-END
-
-IF dependencies.has_known_vulnerabilities THEN
-  RETURN FAIL (exit 10)
-END
-
-IF code_diff.lines_changed > 5000 THEN
-  RETURN APPROVAL_REQUIRED (exit 20)
-END
-
-IF all_checks_pass THEN
-  RETURN PASS (exit 0)
-END
-```
-
-Post-deployment policies are stricter (treat MEDIUM findings as FAIL instead of routing to approval).
-
-## Deployment Workflow
-
-### Pre-Deployment Gate (CI/CD)
-```
-1. Code pushed to branch
-2. GitHub Actions triggered
-3. Run tests → Build image → Publish to registry
-4. Collect evidence (diff, dependencies, test results, image digest)
-5. Invoke Broker with evidence
-6. Broker returns exit code
-   - EXIT 0 (PASS) → Deploy immediately
-   - EXIT 10 (FAIL) → Stop, notify developers
-   - EXIT 20 (APPROVAL_REQUIRED) → Create approval ticket, wait for human review
-   - EXIT 30 (ERROR) → Stop, investigate error
-7. If approved or PASS, deploy using image digest
-```
-
-### Post-Deployment Verification
-```
-1. Application deployed and running
-2. Wait 5 minutes for stabilization
-3. Collect runtime evidence (logs, metrics, health checks)
-4. Invoke Broker with runtime evidence (uses stricter policy)
-5. Broker returns exit code
-   - EXIT 0 (PASS) → Release verified, mark as stable
-   - EXIT 10 (FAIL) → Trigger rollback, create incident
-   - EXIT 20/30 → Escalate (no approval gate in post-deploy)
-```
-
-## Key Design Decisions
-
-1. **Evidence as JSON** — Structured, machine-readable, easy to version and audit
-2. **Relative paths only** — Security: prevents path traversal attacks and accidental exposure of absolute paths
-3. **Deterministic exit codes** — Clear, unambiguous decisions (no string parsing, no ambiguity)
-4. **Two-policy model** — Pre-deploy: can route to approval; post-deploy: stricter, no approval
-5. **Immutable deployments** — By digest, not by tag—ensures reviewed code actually runs
-6. **Broker is stateless** — No side effects, only policy evaluation; evidence is the source of truth
 
 ## System Components
 
