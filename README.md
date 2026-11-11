@@ -1,192 +1,111 @@
-# DRA 2.0 Release Governance Proof of Concept
+# DRA 2.0 — Release Governance with AI Policy Engine
 
-Demonstrates release governance with policy-driven approval gates and evidence-based deployment decisions.
+Demonstrates policy-driven release gates using AI evidence analysis and human approval.
 
-## The Proof of Concept
+**Status:** Proprietary POC. Prior written permission required.
 
-**Goal:** Prove that a broker-based policy engine can control application deployments through evidence review and human approval gates.
+## Overview
 
-**What This Does:**
-- Collects evidence from code builds (changes, dependencies, test results)
-- Submits evidence to a policy engine (Broker) for review
-- Enforces policy decisions (PASS/FAIL/APPROVAL_REQUIRED/ERROR)
-- Routes approval decisions to human reviewers when needed
-- Deploys only approved, reviewed code digests
-- Verifies post-deployment state
+**What It Proves:**
+- AI policy engine (Broker) reviews evidence from code builds
+- Evidence-based decisions block, require approval, or pass releases
+- Human reviewers approve when policy requires it
+- Deployed code matches exactly what was reviewed (by digest)
+- Post-deployment verification enforces stricter policy
 
-**Not What This Is:**
-- Not about features or user experience
-- Not a production application
-- Not complex business logic
-- The application itself is minimal; the governance pipeline is the focus
+**Key Principles:**
+- Immutable deployments by SHA256 digest
+- Evidence-driven decisions (no guessing)
+- Fail closed (errors block, never authorize)
+- Human approval gates for approval-required findings
 
-## How It Works
+## AI Policy Engine Workflow
 
 ```mermaid
 flowchart LR
-    A["<b>Build</b><br/>Test & Build<br/>Publish Digest"] 
-    B["<b>Prepare Evidence</b><br/>Collect Code<br/>Changes & Logs"]
-    C["<b>Broker Review</b><br/>Analyze Evidence<br/>Apply Policy"]
-    D{{"<b>Policy Decision</b><br/>PASS/FAIL/APPROVAL"}}
-    E["<b>Human Approval</b><br/>If Required<br/>Protected Gate"]
-    F["<b>Deploy</b><br/>Approved Digest<br/>No Rebuild"]
-    G["<b>Post-Deploy</b><br/>Verify State<br/>Stricter Policy"]
+    A["Build<br/>Test & Publish"] 
+    B["Evidence<br/>Collect Changes"]
+    C["AI Broker<br/>Analyze Policy"]
+    D{{"Decision<br/>PASS/FAIL/APPROVE"}}
+    E["Approval<br/>Human Review"]
+    F["Deploy<br/>Reviewed Digest"]
+    G["Verify<br/>Post-Deploy"]
     
-    A -->|Build Complete| B
-    B -->|Evidence Ready| C
-    C -->|Policy Applied| D
+    A -->|Complete| B
+    B -->|Submit| C
+    C -->|Result| D
     D -->|PASS| F
-    D -->|APPROVAL_REQUIRED| E
+    D -->|APPROVE| E
     E -->|Approved| F
-    D -->|FAIL/ERROR| H["<b>Block</b><br/>Release Blocked"]
-    F -->|Deployed| G
+    D -->|FAIL| X["Block"]
+    F -->|Live| G
     
-    style A fill:#4A90E2,stroke:#2E5C8A,color:#fff,stroke-width:3px
-    style B fill:#7B68EE,stroke:#4D3FA3,color:#fff,stroke-width:3px
-    style C fill:#FF6B6B,stroke:#CC5555,color:#fff,stroke-width:3px
-    style D fill:#FFA500,stroke:#CC8400,color:#fff,stroke-width:3px
-    style E fill:#FFA500,stroke:#CC8400,color:#fff,stroke-width:3px
-    style F fill:#2ECC71,stroke:#238B5C,color:#fff,stroke-width:3px
-    style G fill:#2ECC71,stroke:#238B5C,color:#fff,stroke-width:3px
-    style H fill:#E74C3C,stroke:#A93226,color:#fff,stroke-width:3px
+    style A fill:#4A90E2,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
+    style B fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
+    style C fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
+    style D fill:#F39C12,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
+    style E fill:#F39C12,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
+    style F fill:#27AE60,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
+    style G fill:#27AE60,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
+    style X fill:#C0392B,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
 ```
 
-## Architecture
+## System Architecture
 
 ```mermaid
 graph LR
-    subgraph Runtime["<b>Runtime Application</b>"]
-        Browser["<b>Browser</b><br/>Access"]
-        Frontend["<b>Frontend</b><br/>Nginx"]
-        Backend["<b>Backend</b><br/>Flask API"]
-        Database["<b>Database</b><br/>CRUD API + SQLite"]
-        Browser -->|HTTPS| Frontend
-        Frontend -->|Internal| Backend
-        Backend -->|Internal| Database
-    end
+    UI["🌐 Browser"]
+    APP["📦 Application<br/>4 Microservices"]
+    BUILD["🔨 Build<br/>Test & Publish"]
+    EVID["📋 Evidence<br/>Collect Changes"]
+    BROKER["🤖 AI Broker<br/>Policy Analysis"]
+    GATE["🔐 Approval<br/>Gate"]
     
-    subgraph Governance["<b>Governance Pipeline</b>"]
-        Build["<b>Build</b><br/>Test, Publish"]
-        Broker["<b>Broker</b><br/>Policy Engine"]
-        Gate["<b>Gate</b><br/>Decision"]
-        Build -->|Evidence| Broker
-        Broker -->|Policy Decision| Gate
-    end
+    UI -->|Access| APP
+    BUILD -->|Complete| EVID
+    EVID -->|Submit| BROKER
+    BROKER -->|Decision| GATE
+    GATE -->|Deploy| APP
     
-    Governance -->|Deploy Approved| Runtime
-    
-    style Runtime fill:#E8F4F8,stroke:#2E7D99,stroke-width:2px,color:#000
-    style Governance fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000
-    style Browser fill:#4A90E2,stroke:#2E5C8A,color:#fff,stroke-width:2px
-    style Frontend fill:#7B68EE,stroke:#4D3FA3,color:#fff,stroke-width:2px
-    style Backend fill:#7B68EE,stroke:#4D3FA3,color:#fff,stroke-width:2px
-    style Database fill:#7B68EE,stroke:#4D3FA3,color:#fff,stroke-width:2px
-    style Build fill:#FF6B6B,stroke:#CC5555,color:#fff,stroke-width:2px
-    style Broker fill:#FF6B6B,stroke:#CC5555,color:#fff,stroke-width:2px
-    style Gate fill:#FFA500,stroke:#CC8400,color:#fff,stroke-width:2px
+    style UI fill:#4A90E2,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
+    style APP fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
+    style BUILD fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
+    style EVID fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
+    style BROKER fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
+    style GATE fill:#F39C12,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
 ```
-
-**Key Design:** Only frontend is public. Backend and database are internal. Broker is invoked during deployment decisions, not runtime.
 
 ## The Application
 
-The app is intentionally minimal — a simple task tracker to have *something to deploy*.
+Task tracker: minimal app to verify governance pipeline works with real code.
 
-**Functionality:**
-- Login with demo credentials
-- Create, read, delete tasks
-- Simple HTML UI (no framework, no fancy design)
-- Database microservice (CRUD API over SQLite)
+- **Frontend:** Nginx (login, dashboard)
+- **Backend:** Flask REST API (authentication, task CRUD)
+- **Database:** CRUD API over SQLite
+- **UI:** Plain HTML, no framework
 
-**Purpose:** Proves the governance pipeline works with a real (if simple) application.
-
-## Quick Start
-
+**Run Locally:**
 ```sh
-# Configure credentials
 cp .env.example .env
-# Edit .env: set INTERNAL_API_TOKEN, DEMO_USERNAME, DEMO_PASSWORD
-
-# Run locally
 docker compose up --build
-
-# Access the application
 open http://localhost:8080
 ```
 
-## What Matters Here
+## Key Design Decisions
 
-| Concern | What We're Proving |
-|---------|-------------------|
-| **Evidence Collection** | Can we extract code and build data? |
-| **Policy Enforcement** | Does the Broker correctly apply policy? |
-| **Approval Gates** | Can humans block or approve? |
-| **Immutable Deployment** | Does reviewed code actually deploy unchanged? |
-| **Post-Deploy Verification** | Can we verify deployment and enforce stricter policy? |
-
-**NOT the focus:**
-- Beautiful UI
-- Complex features
-- Enterprise scalability
-- User experience
+| Aspect | Decision | Reason |
+|--------|----------|--------|
+| **App** | Minimal (tasks only) | Focus on governance, not features |
+| **Deployment** | By digest (SHA256) | Ensures exact reviewed code runs |
+| **Policy** | AI-based | Demonstrates automated governance |
+| **Human Gate** | For approval findings | Humans control medium-severity releases |
+| **Post-Deploy** | Stricter policy | Enforce governance at runtime |
+| **Scope** | POC only | Not production-ready; demonstrates concept |
 
 ## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| **[Architecture](docs/architecture.md)** | Release governance flow, broker integration, deployment stages |
-| **[Broker Reference](docs/broker.md)** | Policy outcomes, evidence validation, result format |
-| **[Operations](docs/operations.md)** | Security, deployment, troubleshooting |
-| **[Getting Started](docs/USAGE.MD)** | Local setup, Docker Compose, scripts |
-
-See **[Documentation Index](docs/index.MD)** for complete navigation.
-
-## Key Design Decisions
-
-### By Design
-- **Application is minimal** — Just enough to deploy and verify
-- **Broker is external** — Separate service, not included in code
-- **Evidence is collected** — Code, logs, build artifacts
-- **Policy gates are enforced** — Humans approve when policy requires it
-- **Deployment is immutable** — No rebuilds after review
-- **Post-deploy is stricter** — Tighter policy for runtime safety
-
-### Scope Limits
-- Simple app (task tracker)
-- Demo credentials (no OAuth/LDAP)
-- No auto-rollback (deliberate limitation)
-- No persistent storage in Azure (POC design)
-
-## Development Phases
-
-| Phase | Focus | Duration |
-|-------|-------|----------|
-| 1 | Minimal app (database, API, basic UI) | Week 1 |
-| 2 | Docker & docker-compose | Week 1 |
-| 3 | CI/CD pipeline & evidence collection | Week 2 |
-| 4 | Broker integration & approval gates | Week 2 |
-| 5 | Testing, quality gates, post-deploy | Week 1 |
-
-## Success Criteria
-
-✓ Application runs (docker-compose up works)  
-✓ CI/CD pipeline executes (test → build → publish)  
-✓ Evidence is collected and formatted correctly  
-✓ Broker can be invoked (mocked or real)  
-✓ Policy decisions are enforced (PASS/FAIL/APPROVAL)  
-✓ Approval gates work (human can approve/reject)  
-✓ Deployment uses reviewed digests (no rebuild)  
-✓ Post-deployment verification runs  
+[Quick Start](docs/USAGE.MD) · [Architecture](docs/architecture.md) · [Broker Spec](docs/broker.md) · [Operations](docs/operations.md) · [Index](docs/index.MD)
 
 ## License
 
-**Proprietary.** Public visibility grants no reuse or deployment rights.
-
-Execution, testing, and deployment require prior written permission.  
-See [LICENSE](LICENSE) for complete terms.
-
----
-
-<p align="center">
-	<sub><span style="color:#666">DRA 2.0 POC · Release Governance Demonstration · Dr. Georges Bou Ghantous © 2026</span></sub>
-</p>
+**Proprietary.** Prior written permission required. See [LICENSE](LICENSE).
