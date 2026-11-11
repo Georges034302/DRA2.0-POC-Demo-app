@@ -104,7 +104,13 @@ open http://localhost:8080
 
 ## Documentation
 
-[Quick Start](docs/USAGE.MD) · [Architecture](docs/architecture.md) · [Broker Spec](docs/broker.md) · [Operations](docs/operations.md) · [Index](docs/index.MD)
+Complete guides and references for setup, deployment, and operations.
+
+- **[Quick Start](docs/USAGE.MD)** — Local setup, testing, CI/CD workflow
+- **[Architecture](docs/architecture.md)** — System design, broker flow, policy outcomes
+- **[Broker Spec](docs/broker.md)** — Policy evaluation, evidence format, results
+- **[Operations](docs/operations.md)** — Setup, deployment, troubleshooting
+- **[Index](docs/index.MD)** — Complete documentation navigation
 
 ## License
 
