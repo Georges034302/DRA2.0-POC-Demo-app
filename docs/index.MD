@@ -74,7 +74,7 @@ See **[Glossary](glossary.md)** for complete terminology reference.
 ## Repository Structure
 
 ```
-frontend/               # Nginx reverse proxy, Flask UI, HTMX
+frontend/               # Nginx reverse proxy and static UI
 backend/                # Flask REST API, task validation
 database/               # CRUD API, SQLite persistence
 scripts/                # Automation: build, review, deploy, verify

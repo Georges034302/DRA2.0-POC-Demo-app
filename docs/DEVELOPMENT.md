@@ -31,7 +31,7 @@ A minimal task tracker:
 
 ## Development Phases
 
-### Phase 1: Minimal App (3-4 days)
+### Phase 1: Minimal App
 Create a simple, working application:
 - Database: Task model (id, title, status)
 - API: GET /tasks, POST /tasks, DELETE /tasks/:id
@@ -41,7 +41,7 @@ Create a simple, working application:
 
 **Deliverable:** App works locally, API responds, tasks can be created/deleted
 
-### Phase 2: CI/CD Pipeline (4-5 days)
+### Phase 2: CI/CD Pipeline
 Build the governance infrastructure:
 - GitHub Actions workflow (ci-cd.yml)
 - Test stage (pytest)
@@ -52,7 +52,7 @@ Build the governance infrastructure:
 
 **Deliverable:** Pipeline runs, builds images, publishes digests, collects evidence
 
-### Phase 3: Broker Integration (3-4 days)
+### Phase 3: Broker Integration
 Connect evidence to policy decisions:
 - Broker invocation (mock or real)
 - Policy evaluation (PASS/FAIL/APPROVAL_REQUIRED/ERROR)
@@ -62,7 +62,7 @@ Connect evidence to policy decisions:
 
 **Deliverable:** Broker can be called, decisions are enforced, approvals work
 
-### Phase 4: Deployment & Verification (2-3 days)
+### Phase 4: Deployment & Verification
 Complete the governance flow:
 - Immutable deployment (deploy by digest, no rebuild)
 - Post-deployment workflow (post-deployment.yml)
@@ -72,7 +72,7 @@ Complete the governance flow:
 
 **Deliverable:** Full end-to-end flow works, from build to post-deploy
 
-### Phase 5: Polish & Documentation (2-3 days)
+### Phase 5: Polish & Documentation
 Finalize for demo:
 - Tests and quality gates
 - Error handling
@@ -106,29 +106,28 @@ Finalize for demo:
 ```
 frontend/
   ├─ Dockerfile
-  ├─ requirements.txt (Flask, Jinja2)
-  ├─ app.py (Flask server, render templates)
+  ├─ nginx.conf (serves the UI, proxies /api to the backend)
   ├─ templates/
-  │  ├─ base.html
   │  ├─ login.html
-  │  └─ tasks.html
+  │  └─ dashboard.html
   └─ static/
-     └─ style.css
+     ├─ css/style.css
+     └─ js/app.js (theme toggle)
 
 backend/
   ├─ Dockerfile
-  ├─ requirements.txt (Flask, SQLAlchemy)
-  ├─ app.py (Flask API)
-  ├─ models.py (Task model)
+  ├─ requirements.txt (Flask, requests)
+  ├─ app.py (Flask API, calls the database service)
   └─ tests/
-     └─ test_api.py
+     └─ test_tasks.py
 
 database/
   ├─ Dockerfile
-  ├─ requirements.txt (Flask)
-  ├─ app.py (CRUD API)
-  ├─ schema.py (database schema)
-  └─ migrations/ (schema versions)
+  ├─ requirements.txt (Flask, gunicorn)
+  ├─ init-db.py (create database, load initial data)
+  ├─ app.py (CRUD API for the backend)
+  └─ tests/
+     └─ test_database.py
 
 scripts/
   ├─ build.sh (test, build, publish)
@@ -272,6 +271,6 @@ Refer to:
 
 ---
 
-**Status:** Ready to begin Phase 1  
-**Next:** Create minimal application structure  
-**Timeline:** 2-3 weeks to complete demo
+**Status:** Phase 1 complete
+
+**Next:** Begin Phase 2 — CI/CD Pipeline
