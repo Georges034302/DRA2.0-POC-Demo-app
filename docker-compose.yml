@@ -1,12 +1,15 @@
-services:
-  # All services use the host network: this environment blocks container-to-container
-  # traffic on Docker bridge networks. Ports: frontend 80, backend 5000, database 5001.
+version: '3.9'
 
-  # Frontend: Nginx serving the UI and proxying /api to the backend.
+services:
+  # Frontend: Nginx reverse proxy serving UI and proxying /api to backend
+  # Uses bridge network for cross-platform compatibility (Windows, macOS, Linux)
   frontend:
     build: ./frontend
     container_name: dra-frontend
-    network_mode: host
+    networks:
+      - dra-network
+    ports:
+      - "8080:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -16,17 +19,21 @@ services:
       timeout: 5s
       retries: 3
 
-  # Backend: Flask API for login and tasks; stores nothing itself, calls the database service.
+  # Backend: Flask API for authentication and task CRUD
+  # Uses service DNS name for cross-platform compatibility
   backend:
     build: ./backend
     container_name: dra-backend
-    network_mode: host
+    networks:
+      - dra-network
+    ports:
+      - "5000:5000"
     depends_on:
       database:
         condition: service_healthy
     environment:
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
-      DATABASE_SERVICE_URL: http://localhost:5001
+      DATABASE_SERVICE_URL: http://database:5001
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
       DEMO_USERNAME: ${DEMO_USERNAME:-user}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-password}
@@ -36,11 +43,15 @@ services:
       timeout: 5s
       retries: 3
 
-  # Database: CRUD API over SQLite; init-db.py creates the schema on start.
+  # Database: Task storage and CRUD operations
+  # Uses service DNS name for cross-platform networking
   database:
     build: ./database
     container_name: dra-database
-    network_mode: host
+    networks:
+      - dra-network
+    ports:
+      - "5001:5001"
     environment:
       DATABASE_PATH: /data/tasks.db
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
@@ -51,6 +62,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+networks:
+  dra-network:
+    driver: bridge
 
 volumes:
   sqlite_data:
