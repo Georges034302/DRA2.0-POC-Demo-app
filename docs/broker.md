@@ -12,26 +12,28 @@
 
 ## Review Modes
 
+The Broker supports two modes; **this pipeline only ever uses `pre_deploy`** (see [Workflow Integration](#workflow-integration) below) because only that mode supports `APPROVAL_REQUIRED`, which the pipeline needs to gate promotion to prod.
+
 ### Pre-Deployment Review
 
 Analyzes code changes and build evidence **before deployment**.
 
 | Aspect | Details |
 |--------|---------|
-| **Trigger** | After build completes, before deployment |
-| **Evidence** | `changes.diff` (source diff only; see [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection)) |
+| **Trigger** | After the dev-stage deployment and health check complete |
+| **Evidence** | `test_report.md`, `build_report.md`, `deployment_report.md`, `results.md` (see [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection)) |
 | **Policy** | CRITICAL/HIGH → FAIL; MEDIUM → APPROVAL_REQUIRED; LOW/INFO → PASS |
 | **Gate** | Can block, require approval, or pass |
-| **Duration** | Completes before deployment decision |
+| **Duration** | Completes before the promote-to-prod decision |
 
 ### Post-Deployment Review
 
-Analyzes deployed state and runtime evidence **after deployment succeeds**.
+Analyzes deployed state and runtime evidence **after deployment succeeds**; a Broker capability this pipeline does not currently invoke (see note above).
 
 | Aspect | Details |
 |--------|---------|
-| **Trigger** | Separate workflow, after deployment is live |
-| **Evidence** | Per-service `<service>-revisions.json`, `<service>-status.json`, `<service>-logs.txt`, plus `health.json` and `status.txt` (see [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection)) |
+| **Trigger** | N/A for this pipeline — documented for completeness |
+| **Evidence** | Runtime/health evidence, same shape as `results.md` |
 | **Policy** | CRITICAL/HIGH/MEDIUM → FAIL; LOW/INFO → PASS (stricter) |
 | **Gate** | Verification passes or fails (no rollback) |
 | **Purpose** | Confirm deployed state matches reviewed expectations |
@@ -180,25 +182,17 @@ Broker attempts to redact common patterns:
 
 ## Workflow Integration
 
-### Pre-Deployment
-
 Invoked by: **ci-cd.yml** workflow  
 Script: **scripts/review.sh**  
-Triggered: After build completes  
-Status: Not yet wired in — `ci-cd.yml`'s review step is currently an inert placeholder (Phase 2); this becomes active in Phase 3 (see [DEVELOPMENT.md](./DEVELOPMENT.md))
-
-### Post-Deployment
-
-Invoked by: **post-deployment.yml** workflow  
-Script: **scripts/post-deploy.sh**  
-Triggered: After deployment succeeds  
-Status: Active (Phase 4)
+Triggered: After the dev-stage deploy and health check complete  
+Mode: Always `pre_deploy` (see [Review Modes](#review-modes))  
+On PASS/approved APPROVAL_REQUIRED: `scripts/deploy.sh STAGE=prod` promotes the same digest
 
 ### Configuration
 
 - Broker image pinned to approved GHCR digest
 - Provider keys (Gemini, Groq) in protected CI secrets
-- Evidence redaction in review scripts
+- Evidence reports pre-filtered before submission (plain Markdown, no secrets by construction)
 
 ## Limitations
 

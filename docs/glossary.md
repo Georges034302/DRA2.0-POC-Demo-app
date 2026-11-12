@@ -9,7 +9,7 @@
 | CI/CD | Continuous integration and delivery: testing, building, and releasing. |
 | Container Apps | Azure service hosting application containers. |
 | CRUD | Create, read, update, delete operations. |
-| Evidence | Report files supplied for broker review: pre-deploy `changes.diff`/`request.json`; post-deploy per-service revision/status/log files, `health.json`, `status.txt`, `request.json`. Pre-filter secrets before submission. See [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection). |
+| Evidence | Four Markdown reports in `temp/reports/`: `test_report.md`, `build_report.md`, `deployment_report.md`, `results.md`. See [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection). |
 | Exit code | Numeric broker result consumed by CI/CD; not a severity. See outcomes below. |
 | Fail closed | Block deployment if review fails or cannot complete. Errors never authorize deployment. |
 | Finding | Model-generated recommendation, not a verified vulnerability. Results may vary. |

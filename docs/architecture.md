@@ -4,12 +4,14 @@ This document describes the governance pipeline architecture and how the Broker 
 
 ## Overview
 
-The POC demonstrates a release governance system where a Broker (policy engine) controls deployment by:
-1. **Collecting evidence** from CI/CD pipelines and application state
-2. **Evaluating policies** against that evidence
-3. **Making deterministic decisions** (PASS, FAIL, APPROVAL_REQUIRED, ERROR)
-4. **Enforcing approval gates** before deployment
-5. **Verifying post-deployment state** and making stricter policy decisions
+The POC demonstrates a release governance system where a Broker (policy engine) controls promotion to production by:
+1. **Testing** application functionality and security (DB, TASKS, SECURITY suites)
+2. **Building** container images and publishing them to ACR by immutable digest
+3. **Deploying** to a dev-stage Azure Container Apps environment
+4. **Collecting evidence** from the test, build, deploy, and post-deploy stages
+5. **Evaluating policies** against that evidence (AI-Broker)
+6. **Making deterministic decisions** (PASS, FAIL, APPROVAL_REQUIRED, ERROR)
+7. **Promoting** the same approved digest to production on PASS (or an approved APPROVAL_REQUIRED)
 
 ## System Architecture
 
@@ -19,117 +21,112 @@ graph TB
         Browser["🌐 Browser"]
     end
     
-    subgraph Frontend["Frontend Container (Nginx)"]
-        FE["Reverse Proxy<br/>Static Assets<br/>Templates"]
+    subgraph App["Azure Container Apps (dev or prod)"]
+        FE["Frontend<br/>Nginx"]
+        API["Backend<br/>Flask API"]
+        DB["Database<br/>Flask + SQLite"]
     end
     
-    subgraph Backend["Backend Container (Flask)"]
-        API["Flask API<br/>Authentication<br/>Task Routes"]
-    end
-
-    subgraph Database["Database Container (Flask)"]
-        DB["CRUD API<br/>SQLite Task Storage"]
-    end
-    
-    subgraph Governance["Governance Pipeline"]
-        CI["GitHub Actions<br/>CI/CD Pipeline (Phase 2)"]
-        Broker["Broker Engine<br/>Policy Evaluation (Phase 3+)"]
+    subgraph Pipeline["CI/CD Pipeline (ci-cd.yml)"]
+        Test["Test<br/>DB / TASKS / SECURITY"]
+        Build["Build<br/>ACR Push"]
+        DeployDev["Deploy (dev)"]
+        VerifyDev["Post-Deploy (dev)"]
+        Broker["AI-Broker<br/>Review"]
+        Promote["Promote (prod)"]
     end
     
     Browser -->|HTTP/80| FE
     FE -->|Proxy /api<br/>http:5000| API
     API -->|HTTP :5001<br/>Internal token| DB
-    CI -->|Build, Test<br/>Publish| FE
-    CI -->|Collect Evidence| Broker
-    Broker -->|Policy Decision| CI
+    
+    Test --> Build --> DeployDev --> VerifyDev --> Broker
+    Broker -->|PASS or approved| Promote
+    DeployDev -.->|deploys| App
+    Promote -.->|promotes same digest| App
     
     style Browser fill:#4A90E2,stroke:#000,stroke-width:2px,color:#fff
     style FE fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff
     style API fill:#50C878,stroke:#000,stroke-width:2px,color:#fff
     style DB fill:#FF9800,stroke:#000,stroke-width:2px,color:#fff
-    style CI fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff
+    style Test fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff
+    style Build fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff
+    style DeployDev fill:#16A085,stroke:#000,stroke-width:2px,color:#fff
+    style VerifyDev fill:#16A085,stroke:#000,stroke-width:2px,color:#fff
     style Broker fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
+    style Promote fill:#27AE60,stroke:#000,stroke-width:2px,color:#fff
 ```
 
-**Three-Container Deployment:**
+**Three-Container Application (deployed twice: dev stage, then promoted to prod stage):**
 1. **Frontend** (Nginx): Reverse proxy, serves static HTML/CSS/JS, routes `/api/*` to backend
 2. **Backend** (Flask): REST API with authentication, proxies task operations to database
 3. **Database** (Flask + SQLite): CRUD API that manages task storage
 
 **Networking:** Docker bridge network enables cross-container communication via service DNS. Ports: frontend 8080→80, backend 5000, database 5001. Health checks on `/health` endpoint.
 
+**Azure dev/prod staging:** One resource group, one Container Apps environment, one ACR, and one Log Analytics workspace are shared; each service gets a `<base>-dev` and `<base>-prod` Container App pair (6 apps total). The Broker's decision controls whether a build is ever promoted from dev to prod — see [Release Governance Flow](#release-governance-flow) below.
+
 ## Release Governance Flow
 
 ```mermaid
 graph LR
-    A["📦 Build & Test"] -->|collect evidence| B["📋 Evidence Package"]
-    B -->|JSON payload| C["🔍 Broker Policy Engine"]
-    C -->|decision| D{"Exit Code"}
-    D -->|0: PASS| E["✅ Auto-Deploy"]
-    D -->|10: FAIL| F["❌ Block Release"]
-    D -->|20: APPROVAL_REQUIRED| G["⏳ Human Approval Gate"]
-    G -->|approved| E
-    G -->|rejected| F
-    E -->|deployed| H["📊 Application Runtime"]
-    H -->|collect runtime evidence| I["📋 Runtime Evidence"]
-    I -->|JSON payload| C
-    C -->|stricter policy| D
+    A["🧪 Test<br/>DB/TASKS/SECURITY"] --> B["🔨 Build & Publish"]
+    B --> C["🚀 Deploy (dev)"]
+    C --> D["🩺 Post-Deploy (dev)"]
+    D -->|4 reports| E["🔍 AI-Broker Review"]
+    E -->|decision| F{"Exit Code"}
+    F -->|0: PASS| G["✅ Promote to Prod"]
+    F -->|10/30: FAIL/ERROR| H["❌ Reject"]
+    F -->|20: APPROVAL_REQUIRED| I["⏳ Human Approval Gate"]
+    I -->|approved| G
+    I -->|rejected| H
     
-    style A fill:#4A90E2,stroke:#000,stroke-width:2px,color:#fff
-    style B fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
-    style C fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff
-    style E fill:#27AE60,stroke:#000,stroke-width:2px,color:#fff
-    style F fill:#E67E22,stroke:#000,stroke-width:2px,color:#fff
-    style G fill:#F39C12,stroke:#000,stroke-width:2px,color:#fff
-    style H fill:#16A085,stroke:#000,stroke-width:2px,color:#fff
-    style D fill:#34495E,stroke:#000,stroke-width:2px,color:#fff
-    style I fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
+    style A fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff
+    style B fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff
+    style C fill:#16A085,stroke:#000,stroke-width:2px,color:#fff
+    style D fill:#16A085,stroke:#000,stroke-width:2px,color:#fff
+    style E fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
+    style F fill:#34495E,stroke:#000,stroke-width:2px,color:#fff
+    style G fill:#27AE60,stroke:#000,stroke-width:2px,color:#fff
+    style H fill:#E67E22,stroke:#000,stroke-width:2px,color:#fff
+    style I fill:#F39C12,stroke:#000,stroke-width:2px,color:#fff
 ```
 
 ## Exit Codes & Policy Outcomes
 
-The Broker returns deterministic exit codes that drive deployment decisions:
+The Broker returns deterministic exit codes that drive the promotion decision:
 
 | Exit Code | Outcome | Action | Notes |
 |-----------|---------|--------|-------|
-| 0 | PASS | Deploy immediately | All policies satisfied |
-| 10 | FAIL | Block release | Policy violation; no approval gate |
+| 0 | PASS | Promote same digest to prod | All policies satisfied |
+| 10 | FAIL | Reject; prod untouched | Policy violation; no approval gate |
 | 20 | APPROVAL_REQUIRED | Route to human gate | Medium/minor findings; approval can override |
-| 30 | ERROR | Block release | Validation failure or provider error |
+| 30 | ERROR | Reject; prod untouched | Validation failure or provider error |
 
 ## Evidence Collection
 
-Evidence is collected at two points in the pipeline (file names and sources per [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection)):
+Evidence is four Markdown reports produced by the pipeline and written to `temp/reports/` (uploaded as GitHub Actions artifacts, then handed to the Broker as its evidence bundle):
 
-### Pre-Deployment Evidence (Phase 3, `scripts/review.sh`)
-- `changes.diff` — git diff of `frontend/`, `backend/`, `database/` between the previous and current commit (relative paths only)
-- `request.json` — `{"mode": "pre_deploy", "repository", "commit", "evidence": ["changes.diff"]}`
+| Report | Script | Contents |
+|--------|--------|----------|
+| `temp/reports/test_report.md` | [scripts/post-test.sh](../scripts/post-test.sh) | Status + pass/fail/error/skip counts per suite: DB, TASKS, SECURITY |
+| `temp/reports/build_report.md` | [scripts/build.sh](../scripts/build.sh) | Per-service image digest after build & ACR push |
+| `temp/reports/deployment_report.md` | [scripts/deploy.sh](../scripts/deploy.sh) `STAGE=dev` | Per-service app name, image digest, FQDN for the dev deployment |
+| `temp/reports/results.md` | [scripts/post-deploy.sh](../scripts/post-deploy.sh) `STAGE=dev` | Per-service revision/provisioning status, log line counts, frontend `/health` result |
 
-**Format**: JSON payload with relative paths only (no absolute paths, no `../` escapes)
-
-### Post-Deployment Evidence (Phase 4, `scripts/post-deploy.sh`)
-- `<service>-revisions.json` — Azure CLI revision health/state, per service
-- `<service>-status.json` — Azure CLI provisioning state + ingress FQDN, per service
-- `<service>-logs.txt` — last 40 log lines, per service
-- `health.json` — frontend `/health` endpoint response
-- `status.txt` — deterministic health verdict (`ok`/`unhealthy`)
-- `request.json` — `{"mode": "post_deploy", "repository", "commit", "evidence": [<above filenames>]}`
-
-**Format**: Same request schema as pre-deployment evidence; see [AI-Broker Reference](./broker.md#input-validation)
+**Format**: Plain Markdown, UTF-8, capped at 120 KiB per report before being sent to the Broker (see [AI-Broker Reference](./broker.md#input-validation))
 
 ## Policy Decision Flow
 
 ```mermaid
 graph TD
-    A["Evidence Collected"] -->|JSON payload| B["Broker: Validate Input"]
-    B -->|valid| C["Broker: Evaluate Policies"]
+    A["Evidence Collected<br/>(4 reports)"] -->|JSON payload| B["Broker: Validate Input"]
+    B -->|valid| C["Broker: Evaluate Policy"]
     B -->|invalid| D["❌ EXIT 30: ERROR"]
     C -->|all pass| E["✅ EXIT 0: PASS"]
     C -->|critical findings| F["❌ EXIT 10: FAIL"]
-    C -->|medium findings| G{Pre vs Post Deploy?}
-    G -->|pre-deploy| H["⏳ EXIT 20: APPROVAL_REQUIRED"]
-    G -->|post-deploy| I["❌ EXIT 10: FAIL (stricter)"]
-    E -->|immutable deploy| J["Deploy by image digest<br/>not rebuild"]
+    C -->|medium findings| H["⏳ EXIT 20: APPROVAL_REQUIRED"]
+    E -->|promote| J["Promote same digest<br/>dev → prod"]
     H -->|human approves| J
     
     style A fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
@@ -138,9 +135,7 @@ graph TD
     style D fill:#E67E22,stroke:#000,stroke-width:2px,color:#fff
     style E fill:#27AE60,stroke:#000,stroke-width:2px,color:#fff
     style F fill:#E67E22,stroke:#000,stroke-width:2px,color:#fff
-    style G fill:#34495E,stroke:#000,stroke-width:2px,color:#fff
     style H fill:#F39C12,stroke:#000,stroke-width:2px,color:#fff
-    style I fill:#E67E22,stroke:#000,stroke-width:2px,color:#fff
     style J fill:#27AE60,stroke:#000,stroke-width:2px,color:#fff
 ```
 
@@ -148,16 +143,16 @@ graph TD
 
 Once code is reviewed and approved, deployment uses the exact Docker image digest (SHA256 hash) that was reviewed—**never rebuilt**. This ensures:
 
-- **What was reviewed is what runs** — no drift between CI and production
+- **What was reviewed is what runs** — no drift between dev and prod
 - **Reproducible deployments** — same digest always produces same behavior
-- **Audit trail** — every deployment linked to exact code review and Broker decision
-- **Policy enforcement** — Broker controls which digests can deploy
+- **Audit trail** — every promotion linked to the exact test/build/deploy/health reports and Broker decision
+- **Policy enforcement** — Broker controls which digests get promoted to prod
 
 Example flow:
 1. Build produces image digest `sha256:abc123def456...`
-2. Image is published and evidence collected (includes digest)
-3. Broker evaluates policy against evidence (digest included)
-4. If approved, deployment pulls exact `sha256:abc123def456...` from registry
+2. Digest is deployed to the dev stage; reports collected (digest included in `build_report.md`/`deployment_report.md`)
+3. Broker evaluates policy against all 4 reports
+4. If approved (PASS or approved APPROVAL_REQUIRED), `scripts/deploy.sh STAGE=prod` redeploys exact `sha256:abc123def456...` to prod
 5. No rebuild, no recompilation—exact image that was reviewed runs in production
 
 ## System Components
@@ -231,14 +226,21 @@ DRA2.0-POC-Demo-app/
 ├── backend/
 │   ├── Dockerfile                 # Flask API image build
 │   ├── app.py                     # Flask app: auth + task routes, proxies to database service
-│   ├── requirements.txt           # Python dependencies
-│   └── tests/                     # test_tasks.py — API route tests
+│   └── requirements.txt           # Python dependencies
 ├── database/
 │   ├── Dockerfile                 # Flask CRUD API image build
 │   ├── app.py                     # CRUD API over SQLite
 │   ├── init-db.py                 # Creates schema, seeds initial data on container start
-│   ├── requirements.txt           # Python dependencies
-│   └── tests/                     # test_database.py — CRUD API tests
+│   └── requirements.txt           # Python dependencies
+├── tests/
+│   ├── pre-commit/                # Local git-hook checks (not run in CI)
+│   │   ├── test_ruff_scan.py       # Lint gate
+│   │   ├── test_secrets_scan.py    # detect-secrets gate
+│   │   └── test_dependency_audit.py # pip-audit gate
+│   └── post-commit/                # App functionality tests (scripts/post-test.sh)
+│       ├── test_database.py        # Database service CRUD tests
+│       ├── test_tasks.py           # Backend API functional tests
+│       └── test_security.py        # Auth/token security tests (both services)
 ├── docs/
 │   ├── architecture.md            # This file: system, repo, and governance architecture
 │   ├── CONTRIBUTING.md            # Contribution policy (closed to external contributions)
@@ -249,18 +251,18 @@ DRA2.0-POC-Demo-app/
 │   ├── glossary.md                # Term definitions
 │   └── index.MD                   # Documentation index
 ├── scripts/
-│   ├── setup.sh                   # Validates tooling, runs env-setup, prints next steps
-│   ├── env-setup.sh               # Provisions Azure resource group, ACR, Container Apps env
-│   ├── validate.sh                # Checks required CLI tools and Azure login
-│   ├── build.sh                   # Builds (and optionally publishes) container images
-│   ├── review.sh                  # Sends evidence to the Broker for a policy decision
-│   ├── deploy.sh                  # Deploys approved image digests to Azure Container Apps
-│   ├── post-deploy.sh             # Collects runtime evidence, re-runs Broker policy check
-│   └── cleanup.sh                 # Deletes the Azure resource group (guarded by confirmation)
+│   ├── auth-setup.sh               # One-time: Azure OIDC app reg + federated credential + gh variables
+│   ├── env-setup.sh                # Provisions RG, ACR, Container Apps env, Log Analytics workspace
+│   ├── post-test.sh                # Runs DB/TASKS/SECURITY suites, writes test_report.md
+│   ├── build.sh                    # Builds + pushes images, writes images.json + build_report.md
+│   ├── deploy.sh                   # Deploys digest to dev or prod stage, writes deployment_report.md
+│   ├── post-deploy.sh              # Collects stage health evidence, writes results.md
+│   ├── review.sh                   # Sends all 4 reports to the Broker, emits the decision
+│   └── cleanup.sh                  # Deletes the Azure resource group (guarded by confirmation)
 ├── .github/
 │   └── workflows/
-│       ├── ci-cd.yml               # Build, review, and deploy pipeline
-│       └── post-deployment.yml     # Post-deploy evidence collection and policy check
+│       └── ci-cd.yml                # test → build → deploy(dev) → verify(dev) → review → promote(prod)
+├── .pre-commit-config.yaml          # Wires tests/pre-commit/ into git's pre-commit hook
 ├── docker-compose.yml              # 3-container orchestration config
 ├── README.md                       # Project overview and quick start
 ├── LICENSE                         # Proprietary license terms
@@ -273,23 +275,24 @@ DRA2.0-POC-Demo-app/
 - **frontend/**: Nginx reverse proxy + static assets + templates
 - **backend/**: Flask API (calls the database service)
 - **database/**: Flask CRUD API over SQLite (`init-db.py` seeds schema/data on start)
+- **tests/**: `pre-commit/` (local lint/secrets/dependency gates) and `post-commit/` (DB/TASKS/SECURITY app tests, run in CI)
 - **docs/**: Documentation hub (architecture, guides, reference)
-- **scripts/**: Azure Container Apps setup/build/review/deploy/cleanup automation
-- **.github/workflows/**: GitHub Actions CI/CD and post-deployment pipelines
+- **scripts/**: Azure auth/env setup, test/build/deploy/post-deploy/review/cleanup automation
+- **.github/workflows/**: Single CI/CD pipeline covering test through prod promotion
 
 ## Integration Points
 
-- **GitHub Actions**: Calls Broker API with evidence, receives exit code, routes to approval or deployment
-- **Broker API**: Stateless service that evaluates policies and returns exit codes
-- **Approval gate**: GitHub issue creation, PR comment, or custom interface (out of scope for this POC)
-- **Docker Registry**: Stores images; deployments reference exact digest
-- **Application logs**: Post-deploy monitoring collects evidence for stricter policy review
+- **GitHub Actions**: Orchestrates test → build → deploy(dev) → verify(dev) → review → promote(prod); routes to approval when required
+- **Broker container**: Stateless, pulled by digest from GHCR; reads 4 reports, returns exit code
+- **Approval gate**: GitHub environment protection (`dra-approval`) with required reviewers (out of scope: issue/PR-based approval UIs)
+- **Docker Registry (ACR)**: Stores images; both dev and prod deploys reference the exact same digest
+- **Azure Container Apps**: Dev/prod app pairs per service, sharing one environment/ACR/RG
 
 ## Testing Strategy
 
-- **Unit tests**: Policy evaluation logic, evidence validation
-- **Integration tests**: Broker API mocking, full CI/CD flow with fake evidence
-- **End-to-end tests**: Real app deployment, evidence collection, Broker integration (can mock Broker initially)
+- **Pre-commit** (`tests/pre-commit/`, local only): ruff lint, detect-secrets scan, pip-audit dependency scan
+- **Post-commit** (`tests/post-commit/`, CI via `scripts/post-test.sh`): DB suite (database CRUD), TASKS suite (backend functional), SECURITY suite (auth/token enforcement across both services)
+- **End-to-end**: Full pipeline exercised against live Azure dev/prod infra, Broker integration
 
 ## Security Considerations
 

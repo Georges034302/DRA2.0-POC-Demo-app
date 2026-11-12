@@ -23,30 +23,27 @@ Demonstrates policy-driven release gates using AI evidence analysis and human ap
 
 ```mermaid
 flowchart LR
-    A["Build<br/>Test & Publish"] 
-    B["Evidence<br/>Collect Changes"]
-    C["AI Broker<br/>Analyze Policy"]
+    A["Test & Build"] 
+    B["Deploy<br/>Dev Stage"]
+    C["AI Broker<br/>Analyze Reports"]
     D{{"Decision<br/>PASS/FAIL/APPROVE"}}
     E["Approval<br/>Human Review"]
-    F["Deploy<br/>Reviewed Digest"]
-    G["Verify<br/>Post-Deploy"]
+    F["Promote<br/>Same Digest → Prod"]
     
-    A -->|Complete| B
-    B -->|Submit| C
+    A -->|Reports| B
+    B -->|Reports| C
     C -->|Result| D
     D -->|PASS| F
     D -->|APPROVE| E
     E -->|Approved| F
-    D -->|FAIL| X["Block"]
-    F -->|Live| G
+    D -->|FAIL| X["Reject"]
     
     style A fill:#4A90E2,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
-    style B fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
+    style B fill:#16A085,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
     style C fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
     style D fill:#F39C12,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
     style E fill:#F39C12,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
     style F fill:#27AE60,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
-    style G fill:#27AE60,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
     style X fill:#C0392B,stroke:#000,stroke-width:2px,color:#fff,font-size:14px
 ```
 
@@ -55,22 +52,25 @@ flowchart LR
 ```mermaid
 graph LR
     UI["🌐 Browser"]
-    APP["📦 Application<br/>4 Microservices"]
-    BUILD["🔨 Build<br/>Test & Publish"]
-    EVID["📋 Evidence<br/>Collect Changes"]
+    APP["📦 Application<br/>Dev / Prod"]
+    TEST["🧪 Test<br/>DB/TASKS/SECURITY"]
+    BUILD["🔨 Build<br/>Push to ACR"]
+    DEPLOY["🚀 Deploy<br/>Dev Stage"]
     BROKER["🤖 AI Broker<br/>Policy Analysis"]
     GATE["🔐 Approval<br/>Gate"]
     
     UI -->|Access| APP
-    BUILD -->|Complete| EVID
-    EVID -->|Submit| BROKER
+    TEST --> BUILD --> DEPLOY
+    DEPLOY -.->|deploys| APP
+    DEPLOY -->|Reports| BROKER
     BROKER -->|Decision| GATE
-    GATE -->|Deploy| APP
+    GATE -->|Promote| APP
     
     style UI fill:#4A90E2,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
     style APP fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
+    style TEST fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
     style BUILD fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
-    style EVID fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
+    style DEPLOY fill:#16A085,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
     style BROKER fill:#E74C3C,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
     style GATE fill:#F39C12,stroke:#000,stroke-width:2px,color:#fff,font-size:12px
 ```
@@ -99,7 +99,7 @@ open http://localhost:8080
 | **Deployment** | By digest (SHA256) | Ensures exact reviewed code runs |
 | **Policy** | AI-based | Demonstrates automated governance |
 | **Human Gate** | For approval findings | Humans control medium-severity releases |
-| **Post-Deploy** | Stricter policy | Enforce governance at runtime |
+| **Dev/Prod Staging** | Deploy to dev, promote on approval | Broker never blocks the dev deploy, only prod promotion |
 | **Scope** | POC only | Not production-ready; demonstrates concept |
 
 ## Documentation
