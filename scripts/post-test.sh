@@ -5,45 +5,69 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 mkdir -p temp/reports
-JUNIT_FILE="$(mktemp)"
 COMMIT="${GITHUB_SHA:-$(git rev-parse HEAD)}"
+OVERALL_EXIT=0
 
-set +e
-python3 -m pytest tests/post-commit -q --junit-xml="$JUNIT_FILE"
-PYTEST_EXIT=$?
-set -e
+declare -A SUITE_STATUS SUITE_TOTAL SUITE_PASSED SUITE_FAILED SUITE_ERRORS SUITE_SKIPPED SUITE_DURATION
 
-SUITE_LINE="$(grep -m1 '<testsuite' "$JUNIT_FILE")"
-TOTAL="$(grep -oP 'tests="\K[0-9]+' <<< "$SUITE_LINE")"
-FAILURES="$(grep -oP 'failures="\K[0-9]+' <<< "$SUITE_LINE")"
-ERRORS="$(grep -oP 'errors="\K[0-9]+' <<< "$SUITE_LINE")"
-SKIPPED="$(grep -oP 'skipped="\K[0-9]+' <<< "$SUITE_LINE")"
-DURATION="$(grep -oP 'time="\K[0-9.]+' <<< "$SUITE_LINE")"
-PASSED=$((TOTAL - FAILURES - ERRORS - SKIPPED))
+run_suite() {
+  local key="$1" file="$2" junit exit_code line
+  junit="$(mktemp)"
 
-if [[ "$PYTEST_EXIT" == 0 ]]; then
-  STATUS=Success
-else
-  STATUS=Failed
-fi
+  set +e
+  python3 -m pytest "$file" -q --junit-xml="$junit"
+  exit_code=$?
+  set -e
 
-cat > temp/reports/test_report.md <<EOF
-# Test Report
+  line="$(grep -m1 '<testsuite' "$junit")"
+  local total failures errors skipped duration passed
+  total="$(grep -oP 'tests="\K[0-9]+' <<< "$line")"
+  failures="$(grep -oP 'failures="\K[0-9]+' <<< "$line")"
+  errors="$(grep -oP 'errors="\K[0-9]+' <<< "$line")"
+  skipped="$(grep -oP 'skipped="\K[0-9]+' <<< "$line")"
+  duration="$(grep -oP 'time="\K[0-9.]+' <<< "$line")"
+  passed=$((total - failures - errors - skipped))
 
-Status: $STATUS
-Commit: $COMMIT
-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+  SUITE_TOTAL[$key]=$total
+  SUITE_PASSED[$key]=$passed
+  SUITE_FAILED[$key]=$failures
+  SUITE_ERRORS[$key]=$errors
+  SUITE_SKIPPED[$key]=$skipped
+  SUITE_DURATION[$key]=$duration
 
-## Results
+  if [[ "$exit_code" == 0 ]]; then
+    SUITE_STATUS[$key]=Success
+  else
+    SUITE_STATUS[$key]=Failed
+    OVERALL_EXIT=1
+  fi
 
-- Total: $TOTAL
-- Passed: $PASSED
-- Failed: $FAILURES
-- Errors: $ERRORS
-- Skipped: $SKIPPED
-- Duration: ${DURATION}s
-EOF
+  rm -f "$junit"
+}
 
-rm -f "$JUNIT_FILE"
+run_suite DB tests/post-commit/test_database.py
+run_suite TASKS tests/post-commit/test_tasks.py
+run_suite SECURITY tests/post-commit/test_security.py
+
+{
+  echo '# Test Report'
+  echo
+  if [[ "$OVERALL_EXIT" == 0 ]]; then
+    echo 'Status: Success'
+  else
+    echo 'Status: Failed'
+  fi
+  echo "Commit: $COMMIT"
+  echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo
+  echo '## Results by Suite'
+  echo
+  echo '| Suite | Status | Passed | Failed | Errors | Skipped | Duration |'
+  echo '|---|---|---|---|---|---|---|'
+  for key in DB TASKS SECURITY; do
+    echo "| $key | ${SUITE_STATUS[$key]} | ${SUITE_PASSED[$key]} | ${SUITE_FAILED[$key]} | ${SUITE_ERRORS[$key]} | ${SUITE_SKIPPED[$key]} | ${SUITE_DURATION[$key]}s |"
+  done
+} > temp/reports/test_report.md
+
 cat temp/reports/test_report.md
-exit "$PYTEST_EXIT"
+exit "$OVERALL_EXIT"

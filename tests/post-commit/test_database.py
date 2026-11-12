@@ -23,14 +23,6 @@ with patch.dict(os.environ, {'INTERNAL_API_TOKEN': TOKEN}):
     app = load_module('database_app', 'app.py').app
 
 
-class StartupTests(unittest.TestCase):
-    def test_missing_internal_token_prevents_startup(self):
-        with patch.dict(os.environ):
-            os.environ.pop('INTERNAL_API_TOKEN', None)
-            with self.assertRaisesRegex(RuntimeError, 'INTERNAL_API_TOKEN'):
-                load_module('database_app_no_token', 'app.py')
-
-
 class InitDbTests(unittest.TestCase):
     def test_creates_schema_and_seeds_once(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -116,13 +108,6 @@ class TaskApiTests(unittest.TestCase):
         self.assertEqual(self.client.delete(f'/api/tasks/{task_id}').status_code, 204)
         self.assertEqual(self.client.get(f'/api/tasks/{task_id}').status_code, 404)
         self.assertEqual(self.client.delete(f'/api/tasks/{task_id}').status_code, 404)
-
-    def test_internal_token_is_required(self):
-        anonymous = app.test_client()
-        self.assertEqual(anonymous.get('/api/tasks').status_code, 401)
-        self.assertEqual(anonymous.get('/api/tasks', headers={'X-Internal-Token': 'wrong'}).status_code, 401)
-        self.assertEqual(anonymous.get('/api/tasks', headers={'X-Internal-Token': TOKEN}).status_code, 200)
-        self.assertEqual(anonymous.get('/health').status_code, 200)
 
     def test_root_redirects_browsers_to_the_frontend(self):
         response = app.test_client().get('/')

@@ -56,31 +56,6 @@ class LoginTests(unittest.TestCase):
             tasks = self.client.get('/api/tasks', headers={'Authorization': f"Bearer {response.json['token']}"})
         self.assertEqual(tasks.status_code, 200)
 
-    def test_wrong_or_malformed_credentials_are_rejected(self):
-        for body in (
-            {'username': 'demo', 'password': 'wrong'},
-            {'username': 'other', 'password': 'demo-pass'},
-            {'username': 'demo'},
-            {'username': 5, 'password': 5},
-            ['demo', 'demo-pass'],
-            {},
-        ):
-            with self.subTest(body=body):
-                self.assertEqual(self.client.post('/api/auth/login', json=body).status_code, 401)
-
-    def test_tasks_require_a_valid_token(self):
-        with patch('requests.request') as request_mock:
-            self.assertEqual(self.client.get('/api/tasks').status_code, 401)
-            self.assertEqual(self.client.get('/api/tasks', headers={'Authorization': 'Bearer nonsense'}).status_code, 401)
-            self.assertEqual(self.client.get('/api/tasks', headers={'Authorization': 'mock-token'}).status_code, 401)
-            request_mock.assert_not_called()
-
-    def test_expired_token_is_rejected(self):
-        token = self.client.post('/api/auth/login', json={'username': 'demo', 'password': 'demo-pass'}).json['token']
-        with patch.dict(app.config, {'TOKEN_MAX_AGE': -1}):
-            response = self.client.get('/api/tasks', headers={'Authorization': f'Bearer {token}'})
-        self.assertEqual(response.status_code, 401)
-
     def test_health_needs_no_token(self):
         self.assertEqual(self.client.get('/health').status_code, 200)
 
@@ -154,12 +129,6 @@ class TaskProxyTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         request_mock.assert_not_called()
-
-    @patch('requests.request')
-    def test_database_auth_failure_is_not_reported_as_user_auth_failure(self, request_mock):
-        request_mock.return_value = upstream_response(401, b'{"status": "error", "message": "Unauthorized"}')
-
-        self.assertEqual(self.client.get('/api/tasks').status_code, 502)
 
     @patch('requests.request')
     def test_database_server_error_returns_502(self, request_mock):

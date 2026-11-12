@@ -67,9 +67,9 @@ mkdir -p temp/reports
 {
   echo '# Deployment Health Results'
   echo
+  echo "Status: $overall_status"
   echo "Stage: $STAGE"
   echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "Overall Status: $overall_status"
   if [[ -n "$fqdn" ]]; then
     echo "Frontend URL: https://$fqdn"
   else
@@ -77,33 +77,31 @@ mkdir -p temp/reports
   fi
   echo "Health Endpoint: $health_status"
   echo
-  echo '## Revisions'
+  echo '## Services'
   echo
+  echo '| Service | Revisions | Status | Logs |'
+  echo '|---|---|---|---|'
 
   for service in frontend backend database; do
-    echo "### $service"
-    echo
-
     if revisions="$(jq -c '.' "$TMP/${service}-revisions.json" 2>/dev/null)"; then
-      echo "- Revisions: $revisions"
+      :
     else
-      echo '- Revisions: unavailable'
+      revisions='unavailable'
     fi
 
-    if status="$(jq -c '.' "$TMP/${service}-status.json" 2>/dev/null)"; then
-      echo "- Status: $status"
+    if service_status="$(jq -c '.' "$TMP/${service}-status.json" 2>/dev/null)"; then
+      :
     else
-      echo '- Status: unavailable'
+      service_status='unavailable'
     fi
 
     if [[ -s "$TMP/${service}-logs.txt" ]]; then
-      log_lines="$(wc -l < "$TMP/${service}-logs.txt")"
-      echo "- Recent logs ($log_lines lines captured)"
+      log_lines="$(wc -l < "$TMP/${service}-logs.txt") lines captured"
     else
-      echo '- Recent logs: unavailable'
+      log_lines='unavailable'
     fi
 
-    echo
+    echo "| $service | $revisions | $service_status | $log_lines |"
   done
 } > temp/reports/results.md
 

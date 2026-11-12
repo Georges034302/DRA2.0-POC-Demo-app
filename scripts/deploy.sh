@@ -105,6 +105,7 @@ mkdir -p temp/reports
 cat > temp/reports/deployment_report.md <<EOF
 # Deployment Report
 
+Status: Success
 Stage: $STAGE
 Commit: $GITHUB_SHA
 Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)

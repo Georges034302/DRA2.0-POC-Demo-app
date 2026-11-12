@@ -74,6 +74,7 @@ mkdir -p temp/reports
 cat > temp/reports/build_report.md <<EOF
 # Build Report
 
+Status: Success
 Commit: $GITHUB_SHA
 Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
