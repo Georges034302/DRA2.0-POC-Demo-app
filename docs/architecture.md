@@ -227,26 +227,59 @@ Example flow:
 
 ```
 DRA2.0-POC-Demo-app/
-├── frontend/                      # Nginx reverse proxy + static assets + templates
-├── backend/                       # Flask API (calls the database service)
-├── database/                      # Database microservice: init-db.py + CRUD API over SQLite
-├── docs/                          # Documentation hub (architecture, guides, reference)
-├── scripts/                       # Automation scripts (setup, build, deploy, verify)
-├── .github/                       # GitHub Actions workflows (CI/CD, post-deploy)
-├── docker-compose.yml            # 3-container orchestration config
-├── README.md                      # Project overview and quick start
-├── LICENSE                        # Proprietary license terms
-├── .env.example                   # Environment variables template
-├── .gitignore                     # Git exclusions
-└── .git/                          # Git repository history
+├── frontend/
+│   ├── Dockerfile                 # Nginx image build
+│   ├── nginx.conf                 # Reverse proxy + static serving config
+│   ├── static/                    # css/, js/ — stylesheet and client-side app logic
+│   └── templates/                 # login.html, dashboard.html — served HTML pages
+├── backend/
+│   ├── Dockerfile                 # Flask API image build
+│   ├── app.py                     # Flask app: auth + task routes, proxies to database service
+│   ├── requirements.txt           # Python dependencies
+│   └── tests/                     # test_tasks.py — API route tests
+├── database/
+│   ├── Dockerfile                 # Flask CRUD API image build
+│   ├── app.py                     # CRUD API over SQLite
+│   ├── init-db.py                 # Creates schema, seeds initial data on container start
+│   ├── requirements.txt           # Python dependencies
+│   └── tests/                     # test_database.py — CRUD API tests
+├── docs/
+│   ├── architecture.md            # This file: system, repo, and governance architecture
+│   ├── CONTRIBUTING.md            # Contribution policy (closed to external contributions)
+│   ├── DEVELOPMENT.md             # Local development guide
+│   ├── broker.md                  # AI-Broker reference (policy engine, decisions)
+│   ├── operations.md              # Deployment and operations workflow
+│   ├── USAGE.MD                   # Quick start instructions
+│   ├── glossary.md                # Term definitions
+│   └── index.MD                   # Documentation index
+├── scripts/
+│   ├── setup.sh                   # Validates tooling, runs env-setup, prints next steps
+│   ├── env-setup.sh               # Provisions Azure resource group, ACR, Container Apps env
+│   ├── validate.sh                # Checks required CLI tools and Azure login
+│   ├── build.sh                   # Builds (and optionally publishes) container images
+│   ├── review.sh                  # Sends evidence to the Broker for a policy decision
+│   ├── deploy.sh                  # Deploys approved image digests to Azure Container Apps
+│   ├── post-deploy.sh             # Collects runtime evidence, re-runs Broker policy check
+│   └── cleanup.sh                 # Deletes the Azure resource group (guarded by confirmation)
+├── .github/
+│   └── workflows/
+│       ├── ci-cd.yml               # Build, review, and deploy pipeline
+│       └── post-deployment.yml     # Post-deploy evidence collection and policy check
+├── docker-compose.yml              # 3-container orchestration config
+├── README.md                       # Project overview and quick start
+├── LICENSE                         # Proprietary license terms
+├── .env.example                    # Environment variables template
+├── .gitignore                      # Git ignore rules
+└── .git/                           # Git repository history
 ```
 
 **Key Directories:**
-- **frontend/**: Nginx (Dockerfile, nginx.conf) + static/ (css, js) + templates/ (HTML)
-- **backend/**: Flask app (app.py, models.py) + requirements.txt + Dockerfile
-- **docs/**: architecture.md, DEVELOPMENT.md, broker.md, operations.md, USAGE.MD, glossary.md, index.MD
-- **scripts/**: setup.sh, build.sh, review.sh, deploy.sh, post-deploy.sh (future phases)
-- **.github/workflows/**: ci-cd.yml, post-deployment.yml (future phases)
+- **frontend/**: Nginx reverse proxy + static assets + templates
+- **backend/**: Flask API (calls the database service)
+- **database/**: Flask CRUD API over SQLite (`init-db.py` seeds schema/data on start)
+- **docs/**: Documentation hub (architecture, guides, reference)
+- **scripts/**: Azure Container Apps setup/build/review/deploy/cleanup automation
+- **.github/workflows/**: GitHub Actions CI/CD and post-deployment pipelines
 
 ## Integration Points
 
