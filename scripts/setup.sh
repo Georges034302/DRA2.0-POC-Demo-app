@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 "$ROOT/scripts/validate.sh" azure
 "$ROOT/scripts/env-setup.sh"
+
 cat <<'EOF'
 Manual GitHub/Azure prerequisites (not automatically configured):
 - Configure Azure OIDC federated identity for protected main/deployment jobs.
