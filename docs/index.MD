@@ -41,13 +41,15 @@ DRA 2.0 POC — Release Governance Demo
 
 **Evidence Redaction:** Remove API keys, credentials, and PII before broker analysis.
 
+**Pipeline Status:** Phase 2 (CI/CD + Azure deploy) active; Phase 3 (Broker pre-deploy invocation) pending — placeholder in `ci-cd.yml`; Phase 4 (post-deploy Broker governance) active. See [Development Guide](DEVELOPMENT.md).
+
 ## Repository Structure
 
 ```
 frontend/             # Nginx reverse proxy, static UI
 backend/              # Flask REST API
 database/             # CRUD API, SQLite
-scripts/              # build.sh, review.sh, deploy.sh, post-deploy.sh
+scripts/              # build.sh, review.sh (Phase 3), deploy.sh, post-deploy.sh (Phase 4)
 .github/workflows/    # ci-cd.yml, post-deployment.yml
 docs/                 # Documentation (you are here)
 ```

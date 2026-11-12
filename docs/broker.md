@@ -19,7 +19,7 @@ Analyzes code changes and build evidence **before deployment**.
 | Aspect | Details |
 |--------|---------|
 | **Trigger** | After build completes, before deployment |
-| **Evidence** | Source diff, dependencies, SBOM, scan results, build logs |
+| **Evidence** | `changes.diff` (source diff only; see [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection)) |
 | **Policy** | CRITICAL/HIGH → FAIL; MEDIUM → APPROVAL_REQUIRED; LOW/INFO → PASS |
 | **Gate** | Can block, require approval, or pass |
 | **Duration** | Completes before deployment decision |
@@ -31,7 +31,7 @@ Analyzes deployed state and runtime evidence **after deployment succeeds**.
 | Aspect | Details |
 |--------|---------|
 | **Trigger** | Separate workflow, after deployment is live |
-| **Evidence** | Deployed image details, revision info, logs, health checks |
+| **Evidence** | Per-service `<service>-revisions.json`, `<service>-status.json`, `<service>-logs.txt`, plus `health.json` and `status.txt` (see [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection)) |
 | **Policy** | CRITICAL/HIGH/MEDIUM → FAIL; LOW/INFO → PASS (stricter) |
 | **Gate** | Verification passes or fails (no rollback) |
 | **Purpose** | Confirm deployed state matches reviewed expectations |
@@ -184,13 +184,15 @@ Broker attempts to redact common patterns:
 
 Invoked by: **ci-cd.yml** workflow  
 Script: **scripts/review.sh**  
-Triggered: After build completes
+Triggered: After build completes  
+Status: Not yet wired in — `ci-cd.yml`'s review step is currently an inert placeholder (Phase 2); this becomes active in Phase 3 (see [DEVELOPMENT.md](./DEVELOPMENT.md))
 
 ### Post-Deployment
 
 Invoked by: **post-deployment.yml** workflow  
 Script: **scripts/post-deploy.sh**  
-Triggered: After deployment succeeds
+Triggered: After deployment succeeds  
+Status: Active (Phase 4)
 
 ### Configuration
 

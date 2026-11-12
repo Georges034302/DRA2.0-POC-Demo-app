@@ -31,9 +31,9 @@ graph TB
         DB["CRUD API<br/>SQLite Task Storage"]
     end
     
-    subgraph Governance["Governance (Future - Phase 3+)"]
-        CI["GitHub Actions<br/>CI/CD Pipeline"]
-        Broker["Broker Engine<br/>Policy Evaluation"]
+    subgraph Governance["Governance Pipeline"]
+        CI["GitHub Actions<br/>CI/CD Pipeline (Phase 2)"]
+        Broker["Broker Engine<br/>Policy Evaluation (Phase 3+)"]
     end
     
     Browser -->|HTTP/80| FE
@@ -99,27 +99,23 @@ The Broker returns deterministic exit codes that drive deployment decisions:
 
 ## Evidence Collection
 
-Evidence is collected at two points in the pipeline:
+Evidence is collected at two points in the pipeline (file names and sources per [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection)):
 
-### Pre-Deployment Evidence
-Collected during CI/CD pipeline (build, test, publish stages):
-- **Code diff**: Changes between base and current branch (relative paths only)
-- **Dependencies**: Installed packages and versions
-- **Test results**: Pass/fail counts, coverage metrics
-- **Build logs**: Compilation output, build time
-- **Container image**: Digest (SHA256), base images, layers
+### Pre-Deployment Evidence (Phase 3, `scripts/review.sh`)
+- `changes.diff` — git diff of `frontend/`, `backend/`, `database/` between the previous and current commit (relative paths only)
+- `request.json` — `{"mode": "pre_deploy", "repository", "commit", "evidence": ["changes.diff"]}`
 
 **Format**: JSON payload with relative paths only (no absolute paths, no `../` escapes)
 
-### Post-Deployment Evidence
-Collected after deployment to production:
-- **Runtime configuration**: Environment variables, feature flags
-- **System state**: Memory, CPU, disk usage
-- **Application logs**: Errors, warnings, performance metrics
-- **Service dependencies**: Connected services, versions
-- **Security scan results**: Vulnerability assessments
+### Post-Deployment Evidence (Phase 4, `scripts/post-deploy.sh`)
+- `<service>-revisions.json` — Azure CLI revision health/state, per service
+- `<service>-status.json` — Azure CLI provisioning state + ingress FQDN, per service
+- `<service>-logs.txt` — last 40 log lines, per service
+- `health.json` — frontend `/health` endpoint response
+- `status.txt` — deterministic health verdict (`ok`/`unhealthy`)
+- `request.json` — `{"mode": "post_deploy", "repository", "commit", "evidence": [<above filenames>]}`
 
-**Format**: Same JSON structure as pre-deployment evidence
+**Format**: Same request schema as pre-deployment evidence; see [AI-Broker Reference](./broker.md#input-validation)
 
 ## Policy Decision Flow
 

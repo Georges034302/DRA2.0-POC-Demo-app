@@ -9,7 +9,7 @@
 | CI/CD | Continuous integration and delivery: testing, building, and releasing. |
 | Container Apps | Azure service hosting application containers. |
 | CRUD | Create, read, update, delete operations. |
-| Evidence | Text data supplied for broker review: code diffs, dependencies, test results, logs. Pre-filter secrets before submission. |
+| Evidence | Report files supplied for broker review: pre-deploy `changes.diff`/`request.json`; post-deploy per-service revision/status/log files, `health.json`, `status.txt`, `request.json`. Pre-filter secrets before submission. See [DEVELOPMENT.md](./DEVELOPMENT.md#evidence-collection). |
 | Exit code | Numeric broker result consumed by CI/CD; not a severity. See outcomes below. |
 | Fail closed | Block deployment if review fails or cannot complete. Errors never authorize deployment. |
 | Finding | Model-generated recommendation, not a verified vulnerability. Results may vary. |
@@ -23,6 +23,8 @@
 | Proprietary | Governed by license; public visibility grants no reuse rights. |
 | Redaction | Pre-filter sensitive data (API keys, passwords, PII) before broker analysis. |
 | Release governance | Policy-driven release gates using evidence review and human approval. |
+| `request.json` | Evidence manifest sent to the Broker: `{mode, repository, commit, evidence: [filenames]}`. Written by `scripts/review.sh` (pre-deploy) and `scripts/post-deploy.sh` (post-deploy). |
+| `result.json` | Broker's response: `{outcome, exit_code, summary, findings[], policy_version, metrics}`. See [AI-Broker Reference](./broker.md#result-format). |
 | Secrets | Protected credentials (provider keys, tokens, passwords). Never commit or expose in evidence. |
 
 ## Policy Outcomes

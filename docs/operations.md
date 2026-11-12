@@ -2,6 +2,8 @@
 
 ## Deployment Workflow
 
+**Pipeline Status:** Phase 2 (CI/CD + Azure deploy) active; Phase 3 (Broker pre-deploy invocation) pending — `ci-cd.yml`'s review step is currently an inert placeholder; Phase 4 (post-deploy Broker governance) active. See [Development Guide](DEVELOPMENT.md).
+
 **Immutable Digests:** Images published with SHA256 digests; broker approves digest, not code; deployment uses exact approved digest (no rebuild).
 
 **Release Trigger:** Manual dispatch via GitHub Actions UI (no automatic runs on main).
@@ -113,7 +115,7 @@ lsof -i :5000
 lsof -i :5001
 ```
 
-**Broker returns ERROR (exit 30):**
+**Broker returns ERROR (exit 30):** *(applies once Phase 3 is wired in; the Phase 2 placeholder always reports PASS)*
 - Verify evidence JSON is valid: `cat broker-request.json | jq .`
 - Check all paths are relative (no `../` escapes)
 - Verify broker image digest exists and is accessible
@@ -139,8 +141,8 @@ volumes:
 
 - Build & publish: 5-10 min
 - Tests: 2-3 min
-- Broker invocation: 2-5 min (provider-dependent)
-- Approval gate: 5-30 min (human-driven)
+- Broker invocation: 2-5 min (provider-dependent; Phase 3, not yet active)
+- Approval gate: 5-30 min (human-driven; Phase 3, not yet active)
 - Deployment: 2-5 min
 - **Total pipeline:** ~15-30 min per release
 

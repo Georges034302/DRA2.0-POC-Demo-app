@@ -45,10 +45,10 @@ bash scripts/build.sh
 1. Test
 2. Build images (publish with `--publish`)
 3. Collect evidence (redacted)
-4. Broker review (pre-deployment)
-5. Approval gate if APPROVAL_REQUIRED (human review)
-6. Deploy (approved digest, no rebuild)
-7. Post-deployment workflow collects evidence and runs stricter policy
+4. Broker review (pre-deployment) — *Phase 3, currently a placeholder in `ci-cd.yml`; always reports PASS*
+5. Approval gate if APPROVAL_REQUIRED (human review) — *Phase 3, not yet active*
+6. Deploy (approved digest, no rebuild) — active (Phase 2)
+7. Post-deployment workflow collects evidence and runs stricter policy — active (Phase 4)
 
 **Outcomes:**
 - `PASS` (0): Deploy
