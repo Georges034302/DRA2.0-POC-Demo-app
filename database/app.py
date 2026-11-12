@@ -53,7 +53,7 @@ def require_internal_token():
 # With partial=True only the fields present are checked (for updates).
 def parse_task(data, partial):
     if not isinstance(data, dict):
-        raise ValueError('A JSON object body is required')
+        raise TypeError('A JSON object body is required')
 
     values = {}
     if not partial or 'title' in data:
@@ -127,7 +127,7 @@ def list_tasks():
 def create_task():
     try:
         values = parse_task(request.get_json(silent=True), partial=False)
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         return error(str(exc), 400)
 
     columns = ', '.join(values)
@@ -155,7 +155,7 @@ def update_task(task_id):
 
     try:
         values = parse_task(request.get_json(silent=True), partial=True)
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         return error(str(exc), 400)
     if not values:
         return error('No updatable fields provided', 400)

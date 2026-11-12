@@ -12,3 +12,8 @@ __pycache__/
 *.sqlite*
 .DS_Store
 *.log
+.venv/
+venv
+.ruff_cache
+ruff_cache
+ruff_cache  

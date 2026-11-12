@@ -29,6 +29,12 @@ curl -X POST http://localhost:5000/api/auth/login \
 
 **Prerequisites:** Python 3.12, pytest.
 
+**Virtual environment (recommended, isolates deps from your global Python):**
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
 ```sh
 pip install -r backend/requirements.txt -r database/requirements.txt pytest
 
