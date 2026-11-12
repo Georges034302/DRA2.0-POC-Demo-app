@@ -1,129 +1,124 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${AZURE_RESOURCE_GROUP:?}" "${AZURE_FRONTEND_APP:?}" "${AZURE_BACKEND_APP:?}" "${AZURE_DATABASE_APP:?}"
-: "${BROKER_IMAGE_DIGEST:?}" "${GHCR_READ_TOKEN:?}" "${GHCR_USER:?}" "${GITHUB_REPOSITORY:?}" "${GITHUB_SHA:?}" "${AI_PROVIDER:?}"
+: "${AZURE_RESOURCE_GROUP:?}" "${STAGE:?Set STAGE=dev or STAGE=prod}"
 
-case "$AI_PROVIDER" in
-  gemini)
-    : "${GEMINI_API_KEY:?}" "${GEMINI_MODEL:?}"
-    ;;
-  groq)
-    : "${GROQ_API_KEY:?}" "${GROQ_MODEL:?}"
-    ;;
-  *)
-    exit 1
-    ;;
-esac
-
-if [[ ! "$BROKER_IMAGE_DIGEST" =~ ^ghcr\.io/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+@sha256:[a-f0-9]{64}$ ]]; then
-  echo 'Invalid pinned scanner digest' >&2
+if [[ "$STAGE" != dev && "$STAGE" != prod ]]; then
+  echo 'STAGE must be dev or prod' >&2
   exit 1
 fi
 
-IN="${BROKER_INPUT_DIR:-${RUNNER_TEMP:-/tmp}/dra-post-input}"
-OUT="${BROKER_OUTPUT_DIR:-${RUNNER_TEMP:-/tmp}/dra-post-output}"
-mkdir -p "$IN" "$OUT"
-chmod 700 "$IN" "$OUT"
+FRONTEND_APP_BASE="$(az group show --name "$AZURE_RESOURCE_GROUP" --query 'tags.frontendAppBase' -o tsv)"
+BACKEND_APP_BASE="$(az group show --name "$AZURE_RESOURCE_GROUP" --query 'tags.backendAppBase' -o tsv)"
+DATABASE_APP_BASE="$(az group show --name "$AZURE_RESOURCE_GROUP" --query 'tags.databaseAppBase' -o tsv)"
 
-status=ok
+if [[ -z "$FRONTEND_APP_BASE" || -z "$BACKEND_APP_BASE" || -z "$DATABASE_APP_BASE" ]]; then
+  echo "Resource group $AZURE_RESOURCE_GROUP is missing deployment tags. Run scripts/env-setup.sh first." >&2
+  exit 1
+fi
 
-for part in FRONTEND BACKEND DATABASE; do
-  var="AZURE_${part}_APP"
-  app="${!var}"
+declare -A APP_NAMES=(
+  [frontend]="${FRONTEND_APP_BASE}-${STAGE}"
+  [backend]="${BACKEND_APP_BASE}-${STAGE}"
+  [database]="${DATABASE_APP_BASE}-${STAGE}"
+)
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+overall_status=ok
+
+for service in frontend backend database; do
+  app="${APP_NAMES[$service]}"
 
   if ! az containerapp revision list -g "$AZURE_RESOURCE_GROUP" -n "$app" \
     --query '[].{name:name,active:properties.active,health:properties.healthState,running:properties.runningState}' \
-    -o json > "$IN/${part,,}-revisions.json"; then
-    echo '{"error":"revision query failed"}' > "$IN/${part,,}-revisions.json"
-    status=unhealthy
+    -o json > "$TMP/${service}-revisions.json"; then
+    echo '{"error":"revision query failed"}' > "$TMP/${service}-revisions.json"
+    overall_status=unhealthy
   fi
 
   if ! az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$app" \
     --query '{provisioning:properties.provisioningState,fqdn:properties.configuration.ingress.fqdn}' \
-    -o json > "$IN/${part,,}-status.json"; then
-    echo '{"error":"app query failed"}' > "$IN/${part,,}-status.json"
-    status=unhealthy
+    -o json > "$TMP/${service}-status.json"; then
+    echo '{"error":"app query failed"}' > "$TMP/${service}-status.json"
+    overall_status=unhealthy
   fi
 
-  if ! timeout 20s az containerapp logs show -g "$AZURE_RESOURCE_GROUP" -n "$app" --tail 40 > "$IN/${part,,}-logs.txt" 2>&1; then
-    echo 'Log collection unavailable' > "$IN/${part,,}-logs.txt"
+  if ! timeout 20s az containerapp logs show -g "$AZURE_RESOURCE_GROUP" -n "$app" --tail 40 > "$TMP/${service}-logs.txt" 2>&1; then
+    echo 'Log collection unavailable' > "$TMP/${service}-logs.txt"
   fi
 done
 
-fqdn="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_FRONTEND_APP" --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null || true)"
+fqdn="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "${APP_NAMES[frontend]}" --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null || true)"
+health_status='unreachable'
 
-if [[ -n "$fqdn" ]] && curl -fsS --max-time 25 "https://$fqdn/health" -o "$IN/health.json" && python3 - "$IN/health.json" <<'PYCODE'
-import json
-import sys
-
-assert json.load(open(sys.argv[1]))['status'] == 'ok'
-PYCODE
-then
-  :
+if [[ -n "$fqdn" ]] && curl -fsS --max-time 25 "https://$fqdn/health" -o "$TMP/health.json"; then
+  if python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))['status']=='ok' else 1)" "$TMP/health.json"; then
+    health_status='ok'
+  else
+    health_status='unhealthy'
+    overall_status=unhealthy
+  fi
 else
-  status=unhealthy
-  echo '{"status":"unhealthy"}' > "$IN/health.json"
+  overall_status=unhealthy
 fi
 
-STATUS="$status" python3 - "$IN" "$GITHUB_REPOSITORY" "$GITHUB_SHA" <<'PYCODE'
-import json
-import os
-import pathlib
-import sys
-
-p = pathlib.Path(sys.argv[1])
-files = sorted(x.name for x in p.iterdir() if x.is_file() and x.name != 'request.json')
-
-for name in files:
-    f = p / name
-    f.write_text(f.read_bytes()[:12_000].decode('utf8', 'replace'), encoding='utf8')
-
-(p / 'status.txt').write_text('deterministic health: ' + os.environ['STATUS'])
-files.append('status.txt')
-
-request = {
-    'mode': 'post_deploy',
-    'repository': sys.argv[2],
-    'commit': sys.argv[3],
-    'evidence': files,
-}
-(p / 'request.json').write_text(json.dumps(request))
-PYCODE
-
-printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
-docker pull "$BROKER_IMAGE_DIGEST" >/dev/null
-
-set +e
-docker run --rm --user "$(id -u):$(id -g)" --read-only --cap-drop=ALL --security-opt=no-new-privileges \
-  -v "$IN:/evidence:ro" -v "$IN/request.json:/request.json:ro" -v "$OUT:/output" \
-  -e AI_PROVIDER -e GEMINI_API_KEY -e GEMINI_MODEL -e GROQ_API_KEY -e GROQ_MODEL \
-  "$BROKER_IMAGE_DIGEST" --request /request.json --evidence-dir /evidence --output /output/result.json --provider "$AI_PROVIDER"
-code=$?
-set -e
-
-python3 - "$OUT/result.json" "$code" "$status" <<'PYCODE'
+mkdir -p reports
+python3 - "$TMP" reports/health-report.md "$STAGE" "$overall_status" "$health_status" "$fqdn" <<'PYCODE'
+import datetime
 import json
 import pathlib
 import sys
 
-p = pathlib.Path(sys.argv[1])
-mapping = {'PASS': 0, 'FAIL': 10, 'APPROVAL_REQUIRED': 20, 'ERROR': 30}
+tmp_dir, report_path, stage, overall_status, health_status, fqdn = sys.argv[1:7]
+tmp = pathlib.Path(tmp_dir)
 
-try:
-    r = json.loads(p.read_text())
-    outcome = r.get('outcome')
-    valid = mapping.get(outcome) == int(sys.argv[2])
-except (OSError, ValueError, TypeError):
-    outcome = 'ERROR'
-    valid = False
+lines = [
+    '# Health Report',
+    '',
+    f'Stage: {stage}',
+    f'Timestamp: {datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}',
+    f'Overall Status: {overall_status}',
+    f'Frontend URL: https://{fqdn}' if fqdn else 'Frontend URL: (unavailable)',
+    f'Health Endpoint: {health_status}',
+    '',
+    '## Revisions',
+    '',
+]
 
-if sys.argv[3] != 'ok':
-    outcome = 'FAIL'
-if not valid and sys.argv[3] == 'ok':
-    outcome = 'ERROR'
+for service in ('frontend', 'backend', 'database'):
+    revisions_path = tmp / f'{service}-revisions.json'
+    status_path = tmp / f'{service}-status.json'
+    logs_path = tmp / f'{service}-logs.txt'
 
-print('Post-deployment verification:', outcome)
-if outcome != 'PASS':
-    sys.exit(1)
+    lines.append(f'### {service}')
+    lines.append('')
+
+    try:
+        revisions = json.loads(revisions_path.read_text())
+        lines.append(f'- Revisions: {json.dumps(revisions)}')
+    except (OSError, ValueError):
+        lines.append('- Revisions: unavailable')
+
+    try:
+        status = json.loads(status_path.read_text())
+        lines.append(f'- Status: {json.dumps(status)}')
+    except (OSError, ValueError):
+        lines.append('- Status: unavailable')
+
+    try:
+        log_lines = logs_path.read_text().strip().splitlines()
+        lines.append(f'- Recent logs ({len(log_lines)} lines captured)')
+    except OSError:
+        lines.append('- Recent logs: unavailable')
+
+    lines.append('')
+
+pathlib.Path(report_path).write_text('\n'.join(lines) + '\n')
 PYCODE
+
+cat reports/health-report.md
+
+if [[ "$overall_status" != ok ]]; then
+  exit 1
+fi

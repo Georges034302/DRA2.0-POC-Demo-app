@@ -7,10 +7,8 @@ permissions:
   contents: read
   id-token: write
 jobs:
-  review:
+  test-and-build:
     runs-on: ubuntu-latest
-    # outputs:
-    #   decision: ${{ steps.broker.outputs.decision }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,86 +17,171 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Test application
-        run: |
-          python -m pip install -r backend/requirements.txt -r database/requirements.txt
-          python -m pytest backend/tests database/tests -q
-          bash -n scripts/*.sh
+      - name: Install test dependencies
+        run: python -m pip install -r backend/requirements.txt -r database/requirements.txt
+      - name: Run tests and produce test report
+        run: bash scripts/post-test.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: reports/test-report.md
+          if-no-files-found: error
       - name: Build application containers
         run: bash scripts/build.sh
-      # Step 2 (Azure scripts) — commented out for Step 1 "CI only, no Azure"
-      # - uses: azure/login@v2
-      #   with:
-      #     client-id: ${{ vars.AZURE_CLIENT_ID }}
-      #     tenant-id: ${{ vars.AZURE_TENANT_ID }}
-      #     subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      # - name: Publish tested source images to ACR
-      #   env:
-      #     AZURE_ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
-      #     BUILD_MANIFEST: ${{ runner.temp }}/approved-build/images.json
-      #   run: bash scripts/build.sh --publish
-      # - uses: actions/upload-artifact@v4
-      #   with:
-      #     name: build-manifest
-      #     path: ${{ runner.temp }}/approved-build/images.json
-      #     if-no-files-found: error
-      # Step 3 (Broker, Phase 3) — commented out for Step 1 "CI only, no Azure"
-      # - name: Run private AI-Broker scanner
-      #   id: broker
-      #   run: |
-      #     echo "TODO in Phase 3: invoke the AI-Broker for pre-deploy policy review (scripts/review.sh)"
-      #     echo "decision=PASS" >> "$GITHUB_OUTPUT"
-      # - name: Block all non-approved outcomes
-      #   if: steps.broker.outputs.decision != 'PASS' && steps.broker.outputs.decision != 'APPROVAL_REQUIRED'
-      #   run: exit 1
-  # approval:
-  #   needs: review
-  #   if: needs.review.outputs.decision == 'APPROVAL_REQUIRED'
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: ${{ vars.APPROVAL_ENVIRONMENT || 'dra-approval' }}
-  #   steps:
-  #     - name: Check approval gate is explicitly enabled
-  #       env:
-  #         APPROVAL_GATE_ENABLED: ${{ vars.APPROVAL_GATE_ENABLED }}
-  #       run: |
-  #         test "$APPROVAL_GATE_ENABLED" = true || { echo 'Human approval is not enabled' >&2; exit 1; }
-  # deploy:
-  #   needs: [review, approval]
-  #   if: ${{ always() && needs.review.result == 'success' && (needs.review.outputs.decision == 'PASS' || (needs.review.outputs.decision == 'APPROVAL_REQUIRED' && needs.approval.result == 'success')) }}
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         persist-credentials: false
-  #     - uses: actions/download-artifact@v4
-  #       with:
-  #         name: build-manifest
-  #         path: ${{ runner.temp }}/approved-build
-  #     - uses: azure/login@v2
-  #       with:
-  #         client-id: ${{ vars.AZURE_CLIENT_ID }}
-  #         tenant-id: ${{ vars.AZURE_TENANT_ID }}
-  #         subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-  #     - name: Deploy approved application image digests
-  #       env:
-  #         AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-  #         AZURE_CONTAINERAPPS_ENV: ${{ vars.AZURE_CONTAINERAPPS_ENV }}
-  #         AZURE_ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
-  #         AZURE_FRONTEND_APP: ${{ vars.AZURE_FRONTEND_APP }}
-  #         AZURE_BACKEND_APP: ${{ vars.AZURE_BACKEND_APP }}
-  #         AZURE_DATABASE_APP: ${{ vars.AZURE_DATABASE_APP }}
-  #         INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
-  #         DEMO_USERNAME: ${{ secrets.DEMO_USERNAME }}
-  #         DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
-  #         BUILD_MANIFEST: ${{ runner.temp }}/approved-build/images.json
-  #       run: bash scripts/deploy.sh
-  # verify-deployment-job:
-  #   needs: [review, approval, deploy]
-  #   if: always()
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Require completed deployment
-  #       env:
-  #         DEPLOY_RESULT: ${{ needs.deploy.result }}
-  #       run: test "$DEPLOY_RESULT" = success
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Publish tested source images to ACR
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          BUILD_MANIFEST: ${{ runner.temp }}/approved-build/images.json
+        run: bash scripts/build.sh --publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-manifest
+          path: ${{ runner.temp }}/approved-build/images.json
+          if-no-files-found: error
+  deploy-dev:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-manifest
+          path: ${{ runner.temp }}/approved-build
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy approved image digests to the dev stage
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          STAGE: dev
+          INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+          DEMO_USERNAME: ${{ secrets.DEMO_USERNAME }}
+          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+          BUILD_MANIFEST: ${{ runner.temp }}/approved-build/images.json
+        run: bash scripts/deploy.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deploy-report
+          path: reports/deploy-report.md
+          if-no-files-found: error
+  verify-dev:
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Collect dev-stage health evidence
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          STAGE: dev
+        run: bash scripts/post-deploy.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: health-report
+          path: reports/health-report.md
+          if-no-files-found: error
+  review:
+    needs: [test-and-build, deploy-dev, verify-dev]
+    runs-on: ubuntu-latest
+    outputs:
+      decision: ${{ steps.broker.outputs.decision }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-report'
+          merge-multiple: true
+          path: reports
+      - name: Run private AI-Broker scanner
+        id: broker
+        env:
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          GHCR_USER: ${{ vars.GHCR_USER }}
+          BROKER_IMAGE_DIGEST: ${{ vars.BROKER_IMAGE_DIGEST }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER }}
+          BROKER_INPUT_DIR: ${{ runner.temp }}/broker-input
+          BROKER_OUTPUT_DIR: ${{ runner.temp }}/broker-results
+        run: bash scripts/review.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: broker-review
+          path: ${{ runner.temp }}/broker-results/
+          if-no-files-found: warn
+      - name: Block all non-approved outcomes
+        if: steps.broker.outputs.decision != 'PASS' && steps.broker.outputs.decision != 'APPROVAL_REQUIRED'
+        run: exit 1
+  approval:
+    needs: review
+    if: needs.review.outputs.decision == 'APPROVAL_REQUIRED'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ vars.APPROVAL_ENVIRONMENT || 'dra-approval' }}
+    steps:
+      - name: Check approval gate is explicitly enabled
+        env:
+          APPROVAL_GATE_ENABLED: ${{ vars.APPROVAL_GATE_ENABLED }}
+        run: |
+          test "$APPROVAL_GATE_ENABLED" = true || { echo 'Human approval is not enabled' >&2; exit 1; }
+  promote:
+    needs: [test-and-build, review, approval]
+    if: ${{ always() && needs.review.result == 'success' && (needs.review.outputs.decision == 'PASS' || (needs.review.outputs.decision == 'APPROVAL_REQUIRED' && needs.approval.result == 'success')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-manifest
+          path: ${{ runner.temp }}/approved-build
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Promote approved image digests to production
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          STAGE: prod
+          INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+          DEMO_USERNAME: ${{ secrets.DEMO_USERNAME }}
+          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+          BUILD_MANIFEST: ${{ runner.temp }}/approved-build/images.json
+        run: bash scripts/deploy.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: promote-report
+          path: reports/deploy-report.md
+          if-no-files-found: error
+  verify-promotion-job:
+    needs: [review, approval, promote]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require completed promotion
+        env:
+          PROMOTE_RESULT: ${{ needs.promote.result }}
+        run: test "$PROMOTE_RESULT" = success

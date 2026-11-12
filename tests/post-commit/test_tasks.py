@@ -12,7 +12,8 @@ TEST_ENV = {
     'DEMO_USERNAME': 'demo',
     'DEMO_PASSWORD': 'demo-pass',
 }
-APP_PATH = Path(__file__).resolve().parents[1] / 'app.py'
+REPO_ROOT = Path(__file__).resolve().parents[2]
+APP_PATH = REPO_ROOT / 'backend' / 'app.py'
 
 
 # Loads the backend app by path under a unique name so backend and database tests can share one pytest run.

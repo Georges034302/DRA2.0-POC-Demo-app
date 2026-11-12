@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-DATABASE_DIR = Path(__file__).resolve().parents[1]
+DATABASE_DIR = Path(__file__).resolve().parents[2] / 'database'
 TOKEN = 'test-internal-token'
 
 

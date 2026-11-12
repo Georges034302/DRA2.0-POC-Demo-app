@@ -12,7 +12,7 @@ if [[ "${1:-}" != '--publish' ]]; then
   exit 0
 fi
 
-: "${AZURE_ACR_NAME:?}" "${GITHUB_SHA:?}" "${BUILD_MANIFEST:?}"
+: "${AZURE_RESOURCE_GROUP:?}" "${GITHUB_SHA:?}" "${BUILD_MANIFEST:?}"
 
 if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   echo 'GITHUB_SHA must be the checked-out commit SHA' >&2
@@ -24,14 +24,22 @@ if [[ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
   exit 1
 fi
 
-REGISTRY="$(az acr show -n "$AZURE_ACR_NAME" --query loginServer -o tsv)"
+# Registry name is generated once by env-setup.sh and stored as a resource-group tag.
+REGISTRY_NAME="$(az group show --name "$AZURE_RESOURCE_GROUP" --query 'tags.registryName' -o tsv)"
+
+if [[ -z "$REGISTRY_NAME" ]]; then
+  echo "Resource group $AZURE_RESOURCE_GROUP is missing deployment tags. Run scripts/env-setup.sh first." >&2
+  exit 1
+fi
+
+REGISTRY="$(az acr show -n "$REGISTRY_NAME" --query loginServer -o tsv)"
 
 if [[ "$REGISTRY" != *.azurecr.io ]]; then
   echo 'Unexpected ACR registry server' >&2
   exit 1
 fi
 
-az acr login --name "$AZURE_ACR_NAME" >/dev/null
+az acr login --name "$REGISTRY_NAME" >/dev/null
 
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT

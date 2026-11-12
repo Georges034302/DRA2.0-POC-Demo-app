@@ -26,20 +26,23 @@ if [[ ! "$BROKER_IMAGE_DIGEST" =~ ^ghcr\.io/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+@sha2
   exit 1
 fi
 
+# Evidence is the test/deploy/health reports produced earlier in this same pipeline run
+# (scripts/post-test.sh, scripts/deploy.sh STAGE=dev, scripts/post-deploy.sh STAGE=dev).
+for report in test-report.md deploy-report.md health-report.md; do
+  if [[ ! -f "reports/$report" ]]; then
+    echo "Missing reports/$report — run post-test.sh, deploy.sh, and post-deploy.sh first" >&2
+    exit 1
+  fi
+done
+
 IN="${BROKER_INPUT_DIR:-${RUNNER_TEMP:-/tmp}/dra-broker-input}"
 OUT="${BROKER_OUTPUT_DIR:-${RUNNER_TEMP:-/tmp}/dra-broker-output}"
 mkdir -p "$IN" "$OUT"
 chmod 700 "$IN" "$OUT"
 
-if git rev-parse HEAD^ >/dev/null 2>&1; then
-  git diff --no-ext-diff --no-textconv HEAD^ HEAD -- frontend backend database > "$IN/changes.diff"
-else
-  git show --no-ext-diff --format= --no-textconv HEAD -- frontend backend database > "$IN/changes.diff"
-fi
-
-if [[ ! -s "$IN/changes.diff" ]]; then
-  printf 'No source changes in frontend/backend/database at this revision.\n' > "$IN/changes.diff"
-fi
+for report in test-report.md deploy-report.md health-report.md; do
+  cp "reports/$report" "$IN/$report"
+done
 
 python3 - "$IN" "$GITHUB_REPOSITORY" "$GITHUB_SHA" <<'PYCODE'
 import json
@@ -47,17 +50,22 @@ import pathlib
 import sys
 
 p = pathlib.Path(sys.argv[1])
-f = p / 'changes.diff'
+evidence = ['test-report.md', 'deploy-report.md', 'health-report.md']
 
-# Broker accepts UTF-8 evidence <= 128 KiB. Exclude invalid bytes and cap at 120 KiB.
-text = f.read_bytes()[:120_000].decode('utf8', 'replace')
-f.write_text(text, encoding='utf8')
+# Broker accepts UTF-8 evidence <= 128 KiB per file. Exclude invalid bytes and cap at 120 KiB.
+for name in evidence:
+    f = p / name
+    text = f.read_bytes()[:120_000].decode('utf8', 'replace')
+    f.write_text(text, encoding='utf8')
 
+# mode=pre_deploy is used deliberately even though this review happens after the dev-stage
+# deployment: per docs/broker.md, only pre_deploy policy supports APPROVAL_REQUIRED, which
+# this pipeline needs to gate promotion to prod. post_deploy policy has no approval tier.
 request = {
     'mode': 'pre_deploy',
     'repository': sys.argv[2],
     'commit': sys.argv[3],
-    'evidence': ['changes.diff'],
+    'evidence': evidence,
 }
 (p / 'request.json').write_text(json.dumps(request))
 PYCODE
