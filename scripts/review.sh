@@ -26,11 +26,12 @@ if [[ ! "$BROKER_IMAGE_DIGEST" =~ ^ghcr\.io/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+@sha2
   exit 1
 fi
 
-# Evidence is the test/deploy/health reports produced earlier in this same pipeline run
-# (scripts/post-test.sh, scripts/deploy.sh STAGE=dev, scripts/post-deploy.sh STAGE=dev).
-for report in test-report.md deploy-report.md health-report.md; do
-  if [[ ! -f "reports/$report" ]]; then
-    echo "Missing reports/$report — run post-test.sh, deploy.sh, and post-deploy.sh first" >&2
+# Evidence is the build/test/deploy/health reports produced earlier in this same pipeline run
+# (scripts/build.sh, scripts/post-test.sh, scripts/deploy.sh STAGE=dev, scripts/post-deploy.sh STAGE=dev).
+REPORTS=(build_report.md test_report.md deployment_report.md results.md)
+for report in "${REPORTS[@]}"; do
+  if [[ ! -f "temp/reports/$report" ]]; then
+    echo "Missing temp/reports/$report — run build.sh, post-test.sh, deploy.sh, and post-deploy.sh first" >&2
     exit 1
   fi
 done
@@ -40,35 +41,21 @@ OUT="${BROKER_OUTPUT_DIR:-${RUNNER_TEMP:-/tmp}/dra-broker-output}"
 mkdir -p "$IN" "$OUT"
 chmod 700 "$IN" "$OUT"
 
-for report in test-report.md deploy-report.md health-report.md; do
-  cp "reports/$report" "$IN/$report"
+for report in "${REPORTS[@]}"; do
+  # Broker accepts UTF-8 evidence <= 128 KiB per file.
+  head -c 120000 "temp/reports/$report" > "$IN/$report"
 done
-
-python3 - "$IN" "$GITHUB_REPOSITORY" "$GITHUB_SHA" <<'PYCODE'
-import json
-import pathlib
-import sys
-
-p = pathlib.Path(sys.argv[1])
-evidence = ['test-report.md', 'deploy-report.md', 'health-report.md']
-
-# Broker accepts UTF-8 evidence <= 128 KiB per file. Exclude invalid bytes and cap at 120 KiB.
-for name in evidence:
-    f = p / name
-    text = f.read_bytes()[:120_000].decode('utf8', 'replace')
-    f.write_text(text, encoding='utf8')
 
 # mode=pre_deploy is used deliberately even though this review happens after the dev-stage
 # deployment: per docs/broker.md, only pre_deploy policy supports APPROVAL_REQUIRED, which
 # this pipeline needs to gate promotion to prod. post_deploy policy has no approval tier.
-request = {
-    'mode': 'pre_deploy',
-    'repository': sys.argv[2],
-    'commit': sys.argv[3],
-    'evidence': evidence,
-}
-(p / 'request.json').write_text(json.dumps(request))
-PYCODE
+jq -n \
+  --arg mode pre_deploy \
+  --arg repository "$GITHUB_REPOSITORY" \
+  --arg commit "$GITHUB_SHA" \
+  --argjson evidence "$(printf '%s\n' "${REPORTS[@]}" | jq -R . | jq -s .)" \
+  '{mode: $mode, repository: $repository, commit: $commit, evidence: $evidence}' \
+  > "$IN/request.json"
 
 printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
 docker pull "$BROKER_IMAGE_DIGEST" >/dev/null
@@ -84,26 +71,25 @@ exit_code=$?
 set -e
 
 # Outcome is treated as untrusted until it matches the scanner's exit code contract.
-python3 - "$OUT/result.json" "$exit_code" "${GITHUB_OUTPUT:-}" <<'PYCODE'
-import json
-import pathlib
-import sys
+decision='ERROR'
+if outcome="$(jq -r '.outcome // "ERROR"' "$OUT/result.json" 2>/dev/null)"; then
+  case "$outcome" in
+    PASS) expected_code=0 ;;
+    FAIL) expected_code=10 ;;
+    APPROVAL_REQUIRED) expected_code=20 ;;
+    ERROR) expected_code=30 ;;
+    *) expected_code=-1 ;;
+  esac
+  if [[ "$expected_code" == "$exit_code" ]]; then
+    decision="$outcome"
+  fi
+fi
 
-expected = {'PASS': 0, 'FAIL': 10, 'APPROVAL_REQUIRED': 20, 'ERROR': 30}
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+  echo "decision=$decision" >> "$GITHUB_OUTPUT"
+fi
 
-try:
-    r = json.loads(pathlib.Path(sys.argv[1]).read_text())
-    decision = r.get('outcome', 'ERROR')
-    if decision not in expected or expected[decision] != int(sys.argv[2]):
-        decision = 'ERROR'
-except (ValueError, OSError, TypeError):
-    decision = 'ERROR'
-
-if sys.argv[3]:
-    with open(sys.argv[3], 'a', encoding='utf8') as f:
-        f.write(f'decision={decision}\n')
-
-print('Governance outcome:', decision)
-if decision == 'ERROR':
-    sys.exit(1)
-PYCODE
+echo "Governance outcome: $decision"
+if [[ "$decision" == ERROR ]]; then
+  exit 1
+fi

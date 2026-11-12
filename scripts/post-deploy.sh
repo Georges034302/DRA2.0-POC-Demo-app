@@ -53,7 +53,7 @@ fqdn="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "${APP_NAMES[frontend
 health_status='unreachable'
 
 if [[ -n "$fqdn" ]] && curl -fsS --max-time 25 "https://$fqdn/health" -o "$TMP/health.json"; then
-  if python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))['status']=='ok' else 1)" "$TMP/health.json"; then
+  if jq -e '.status == "ok"' "$TMP/health.json" >/dev/null 2>&1; then
     health_status='ok'
   else
     health_status='unhealthy'
@@ -63,61 +63,51 @@ else
   overall_status=unhealthy
 fi
 
-mkdir -p reports
-python3 - "$TMP" reports/health-report.md "$STAGE" "$overall_status" "$health_status" "$fqdn" <<'PYCODE'
-import datetime
-import json
-import pathlib
-import sys
+mkdir -p temp/reports
+{
+  echo '# Deployment Health Results'
+  echo
+  echo "Stage: $STAGE"
+  echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "Overall Status: $overall_status"
+  if [[ -n "$fqdn" ]]; then
+    echo "Frontend URL: https://$fqdn"
+  else
+    echo 'Frontend URL: (unavailable)'
+  fi
+  echo "Health Endpoint: $health_status"
+  echo
+  echo '## Revisions'
+  echo
 
-tmp_dir, report_path, stage, overall_status, health_status, fqdn = sys.argv[1:7]
-tmp = pathlib.Path(tmp_dir)
+  for service in frontend backend database; do
+    echo "### $service"
+    echo
 
-lines = [
-    '# Health Report',
-    '',
-    f'Stage: {stage}',
-    f'Timestamp: {datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}',
-    f'Overall Status: {overall_status}',
-    f'Frontend URL: https://{fqdn}' if fqdn else 'Frontend URL: (unavailable)',
-    f'Health Endpoint: {health_status}',
-    '',
-    '## Revisions',
-    '',
-]
+    if revisions="$(jq -c '.' "$TMP/${service}-revisions.json" 2>/dev/null)"; then
+      echo "- Revisions: $revisions"
+    else
+      echo '- Revisions: unavailable'
+    fi
 
-for service in ('frontend', 'backend', 'database'):
-    revisions_path = tmp / f'{service}-revisions.json'
-    status_path = tmp / f'{service}-status.json'
-    logs_path = tmp / f'{service}-logs.txt'
+    if status="$(jq -c '.' "$TMP/${service}-status.json" 2>/dev/null)"; then
+      echo "- Status: $status"
+    else
+      echo '- Status: unavailable'
+    fi
 
-    lines.append(f'### {service}')
-    lines.append('')
+    if [[ -s "$TMP/${service}-logs.txt" ]]; then
+      log_lines="$(wc -l < "$TMP/${service}-logs.txt")"
+      echo "- Recent logs ($log_lines lines captured)"
+    else
+      echo '- Recent logs: unavailable'
+    fi
 
-    try:
-        revisions = json.loads(revisions_path.read_text())
-        lines.append(f'- Revisions: {json.dumps(revisions)}')
-    except (OSError, ValueError):
-        lines.append('- Revisions: unavailable')
+    echo
+  done
+} > temp/reports/results.md
 
-    try:
-        status = json.loads(status_path.read_text())
-        lines.append(f'- Status: {json.dumps(status)}')
-    except (OSError, ValueError):
-        lines.append('- Status: unavailable')
-
-    try:
-        log_lines = logs_path.read_text().strip().splitlines()
-        lines.append(f'- Recent logs ({len(log_lines)} lines captured)')
-    except OSError:
-        lines.append('- Recent logs: unavailable')
-
-    lines.append('')
-
-pathlib.Path(report_path).write_text('\n'.join(lines) + '\n')
-PYCODE
-
-cat reports/health-report.md
+cat temp/reports/results.md
 
 if [[ "$overall_status" != ok ]]; then
   exit 1

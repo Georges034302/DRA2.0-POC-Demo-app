@@ -4,67 +4,46 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-REPORT_FILE="reports/test-report.md"
+mkdir -p temp/reports
 JUNIT_FILE="$(mktemp)"
 COMMIT="${GITHUB_SHA:-$(git rev-parse HEAD)}"
-
-mkdir -p reports
 
 set +e
 python3 -m pytest tests/post-commit -q --junit-xml="$JUNIT_FILE"
 PYTEST_EXIT=$?
 set -e
 
-python3 - "$JUNIT_FILE" "$REPORT_FILE" "$COMMIT" "$PYTEST_EXIT" <<'PYCODE'
-import datetime
-import pathlib
-import sys
-import xml.etree.ElementTree as ET
+SUITE_LINE="$(grep -m1 '<testsuite' "$JUNIT_FILE")"
+TOTAL="$(grep -oP 'tests="\K[0-9]+' <<< "$SUITE_LINE")"
+FAILURES="$(grep -oP 'failures="\K[0-9]+' <<< "$SUITE_LINE")"
+ERRORS="$(grep -oP 'errors="\K[0-9]+' <<< "$SUITE_LINE")"
+SKIPPED="$(grep -oP 'skipped="\K[0-9]+' <<< "$SUITE_LINE")"
+DURATION="$(grep -oP 'time="\K[0-9.]+' <<< "$SUITE_LINE")"
+PASSED=$((TOTAL - FAILURES - ERRORS - SKIPPED))
 
-junit_path, report_path, commit, pytest_exit = sys.argv[1:5]
+if [[ "$PYTEST_EXIT" == 0 ]]; then
+  STATUS=Success
+else
+  STATUS=Failed
+fi
 
-root = ET.parse(junit_path).getroot()
-suite = root if root.tag == 'testsuite' else root.find('testsuite')
+cat > temp/reports/test_report.md <<EOF
+# Test Report
 
-total = int(suite.get('tests', 0))
-failures = int(suite.get('failures', 0))
-errors = int(suite.get('errors', 0))
-skipped = int(suite.get('skipped', 0))
-duration = float(suite.get('time', 0))
-passed = total - failures - errors - skipped
+Status: $STATUS
+Commit: $COMMIT
+Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-status = 'Success' if pytest_exit == '0' else 'Failed'
+## Results
 
-failed_cases = []
-for case in suite.iter('testcase'):
-    for tag in ('failure', 'error'):
-        node = case.find(tag)
-        if node is not None:
-            failed_cases.append(f"{case.get('classname')}::{case.get('name')}")
+- Total: $TOTAL
+- Passed: $PASSED
+- Failed: $FAILURES
+- Errors: $ERRORS
+- Skipped: $SKIPPED
+- Duration: ${DURATION}s
+EOF
 
-lines = [
-    '# Test Report',
-    '',
-    f'Status: {status}',
-    f'Commit: {commit}',
-    f'Timestamp: {datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}',
-    '',
-    '## Results',
-    '',
-    f'- Total: {total}',
-    f'- Passed: {passed}',
-    f'- Failed: {failures}',
-    f'- Errors: {errors}',
-    f'- Skipped: {skipped}',
-    f'- Duration: {duration:.2f}s',
-]
-
-if failed_cases:
-    lines += ['', '## Failed Cases', '']
-    lines += [f'- {name}' for name in failed_cases]
-
-pathlib.Path(report_path).write_text('\n'.join(lines) + '\n')
-PYCODE
-
-cat "$REPORT_FILE"
+rm -f "$JUNIT_FILE"
+cat temp/reports/test_report.md
 exit "$PYTEST_EXIT"

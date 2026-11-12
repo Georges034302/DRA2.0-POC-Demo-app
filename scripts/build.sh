@@ -41,9 +41,7 @@ fi
 
 az acr login --name "$REGISTRY_NAME" >/dev/null
 
-TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
-printf '%s\n' '{}' > "$TMP"
+declare -A DIGESTS
 
 for part in frontend backend database; do
   tag="$REGISTRY/dra20-$part:$GITHUB_SHA"
@@ -57,27 +55,35 @@ for part in frontend backend database; do
     exit 1
   fi
 
-  python3 - "$TMP" "$part" "$digest" <<'PYCODE'
-import json
-import sys
-import pathlib
-
-path = pathlib.Path(sys.argv[1])
-data = json.loads(path.read_text())
-data[sys.argv[2]] = sys.argv[3]
-path.write_text(json.dumps(data))
-PYCODE
+  DIGESTS[$part]="$digest"
 done
 
-python3 - "$TMP" "$BUILD_MANIFEST" "$GITHUB_SHA" <<'PYCODE'
-import json
-import sys
-import pathlib
+mkdir -p "$(dirname "$BUILD_MANIFEST")"
+cat > "$BUILD_MANIFEST" <<EOF
+{
+  "commit": "$GITHUB_SHA",
+  "images": {
+    "frontend": "${DIGESTS[frontend]}",
+    "backend": "${DIGESTS[backend]}",
+    "database": "${DIGESTS[database]}"
+  }
+}
+EOF
 
-images = json.loads(pathlib.Path(sys.argv[1]).read_text())
-manifest = pathlib.Path(sys.argv[2])
-manifest.parent.mkdir(parents=True, exist_ok=True)
-manifest.write_text(json.dumps({'commit': sys.argv[3], 'images': images}, indent=2) + '\n')
-PYCODE
+mkdir -p temp/reports
+cat > temp/reports/build_report.md <<EOF
+# Build Report
+
+Commit: $GITHUB_SHA
+Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+## Images
+
+| Service | Image Digest |
+|---|---|
+| frontend | ${DIGESTS[frontend]} |
+| backend | ${DIGESTS[backend]} |
+| database | ${DIGESTS[database]} |
+EOF
 
 printf 'Published application images at immutable digests to %s\n' "$BUILD_MANIFEST"

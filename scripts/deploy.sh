@@ -10,37 +10,24 @@ if [[ "$STAGE" != dev && "$STAGE" != prod ]]; then
   exit 1
 fi
 
-# The ONLY deployable images are the previously built immutable digests from the approved commit.
-python3 - "$BUILD_MANIFEST" "$GITHUB_SHA" <<'PYCODE'
-import json
-import pathlib
-import re
-import sys
+MANIFEST_COMMIT="$(jq -r '.commit' "$BUILD_MANIFEST")"
+if [[ "$MANIFEST_COMMIT" != "$GITHUB_SHA" ]]; then
+  echo 'Build manifest commit mismatch' >&2
+  exit 1
+fi
 
-m = json.loads(pathlib.Path(sys.argv[1]).read_text())
-assert m['commit'] == sys.argv[2], 'Build manifest commit mismatch'
-assert set(m['images']) == {'frontend', 'backend', 'database'}
+DB_IMAGE="$(jq -r '.images.database' "$BUILD_MANIFEST")"
+BACK_IMAGE="$(jq -r '.images.backend' "$BUILD_MANIFEST")"
+FRONT_IMAGE="$(jq -r '.images.frontend' "$BUILD_MANIFEST")"
 
-for x in m['images'].values():
-    assert re.fullmatch(r'[\w.-]+\.azurecr\.io/[\w.-]+@sha256:[a-f0-9]{64}', x), 'Invalid image digest'
-PYCODE
+DIGEST_RE='^[[:alnum:]_.-]+\.azurecr\.io/[[:alnum:]_.-]+@sha256:[a-f0-9]{64}$'
+for image in "$DB_IMAGE" "$BACK_IMAGE" "$FRONT_IMAGE"; do
+  if [[ ! "$image" =~ $DIGEST_RE ]]; then
+    echo "Invalid image digest: $image" >&2
+    exit 1
+  fi
+done
 
-readarray -t DIGESTS < <(python3 - "$BUILD_MANIFEST" <<'PYCODE'
-import json
-import sys
-
-m = json.load(open(sys.argv[1]))['images']
-for k in ('database', 'backend', 'frontend'):
-    print(m[k])
-PYCODE
-)
-
-DB_IMAGE="${DIGESTS[0]}"
-BACK_IMAGE="${DIGESTS[1]}"
-FRONT_IMAGE="${DIGESTS[2]}"
-
-# Name bases are generated once by env-setup.sh and stored as resource-group tags;
-# the actual app name for this deploy is "<base>-<STAGE>" (e.g. dra2-frontend-1234-dev).
 REGISTRY_NAME="$(az group show --name "$AZURE_RESOURCE_GROUP" --query 'tags.registryName' -o tsv)"
 FRONTEND_APP_BASE="$(az group show --name "$AZURE_RESOURCE_GROUP" --query 'tags.frontendAppBase' -o tsv)"
 BACKEND_APP_BASE="$(az group show --name "$AZURE_RESOURCE_GROUP" --query 'tags.backendAppBase' -o tsv)"
@@ -60,10 +47,9 @@ REGISTRY="$(az acr show -n "$REGISTRY_NAME" --query loginServer -o tsv)"
 ACR_ID="$(az acr show -n "$REGISTRY_NAME" --query id -o tsv)"
 
 ensure_app() {
-  local name="$1" port="$2" ingress="$3" image="$4"
+  local name="$1" port="$2" ingress="$3"
 
   if ! az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$name" >/dev/null 2>&1; then
-    # Bootstrap with an available ACR image, then attach pull identity.
     az containerapp create -g "$AZURE_RESOURCE_GROUP" -n "$name" \
       --environment "$AZURE_CONTAINERAPPS_ENV" \
       --image mcr.microsoft.com/azuredocs/containerapps-helloworld:latest \
@@ -83,7 +69,6 @@ ensure_app() {
     return 1
   fi
 
-  # RBAC provisioning may require elevated Azure privileges; errors are not suppressed.
   if ! az role assignment list --assignee "$principal" --role AcrPull --scope "$ACR_ID" --query '[0].id' -o tsv | grep -q .; then
     az role assignment create --assignee-object-id "$principal" --assignee-principal-type ServicePrincipal \
       --role AcrPull --scope "$ACR_ID" -o none
@@ -92,7 +77,7 @@ ensure_app() {
   az containerapp registry set -g "$AZURE_RESOURCE_GROUP" -n "$name" --server "$REGISTRY" --identity system -o none
 }
 
-ensure_app "$DATABASE_APP" 5000 internal "$DB_IMAGE"
+ensure_app "$DATABASE_APP" 5000 internal
 az containerapp secret set -g "$AZURE_RESOURCE_GROUP" -n "$DATABASE_APP" \
   --secrets "service-token=$INTERNAL_API_TOKEN" -o none
 az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$DATABASE_APP" --image "$DB_IMAGE" \
@@ -100,7 +85,7 @@ az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$DATABASE_APP" --image "$D
 DB_FQDN="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$DATABASE_APP" --query properties.configuration.ingress.fqdn -o tsv)"
 [[ -n "$DB_FQDN" ]] || exit 1
 
-ensure_app "$BACKEND_APP" 5000 internal "$BACK_IMAGE"
+ensure_app "$BACKEND_APP" 5000 internal
 az containerapp secret set -g "$AZURE_RESOURCE_GROUP" -n "$BACKEND_APP" \
   --secrets "service-token=$INTERNAL_API_TOKEN" -o none
 az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$BACKEND_APP" --image "$BACK_IMAGE" \
@@ -108,7 +93,7 @@ az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$BACKEND_APP" --image "$BA
 BACK_FQDN="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$BACKEND_APP" --query properties.configuration.ingress.fqdn -o tsv)"
 [[ -n "$BACK_FQDN" ]] || exit 1
 
-ensure_app "$FRONTEND_APP" 8080 external "$FRONT_IMAGE"
+ensure_app "$FRONTEND_APP" 8080 external
 az containerapp secret set -g "$AZURE_RESOURCE_GROUP" -n "$FRONTEND_APP" \
   --secrets "service-token=$INTERNAL_API_TOKEN" "demo-user=$DEMO_USERNAME" "demo-password=$DEMO_PASSWORD" -o none
 az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$FRONTEND_APP" --image "$FRONT_IMAGE" \
@@ -116,33 +101,22 @@ az containerapp update -g "$AZURE_RESOURCE_GROUP" -n "$FRONTEND_APP" --image "$F
   DEMO_USERNAME=secretref:demo-user DEMO_PASSWORD=secretref:demo-password -o none
 FQDN="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$FRONTEND_APP" --query properties.configuration.ingress.fqdn -o tsv)"
 
-mkdir -p reports
-python3 - reports/deploy-report.md "$STAGE" "$GITHUB_SHA" "$DATABASE_APP" "$DB_IMAGE" "$DB_FQDN" "$BACKEND_APP" "$BACK_IMAGE" "$BACK_FQDN" "$FRONTEND_APP" "$FRONT_IMAGE" "$FQDN" <<'PYCODE'
-import datetime
-import pathlib
-import sys
+mkdir -p temp/reports
+cat > temp/reports/deployment_report.md <<EOF
+# Deployment Report
 
-(report_path, stage, commit, db_app, db_image, db_fqdn,
- back_app, back_image, back_fqdn, front_app, front_image, front_fqdn) = sys.argv[1:13]
+Stage: $STAGE
+Commit: $GITHUB_SHA
+Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-lines = [
-    '# Deploy Report',
-    '',
-    f'Stage: {stage}',
-    f'Commit: {commit}',
-    f'Timestamp: {datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}',
-    '',
-    '## Services',
-    '',
-    '| Service | App Name | Image Digest | FQDN |',
-    '|---|---|---|---|',
-    f'| database | {db_app} | {db_image} | {db_fqdn} |',
-    f'| backend | {back_app} | {back_image} | {back_fqdn} |',
-    f'| frontend | {front_app} | {front_image} | {front_fqdn} |',
-]
+## Services
 
-pathlib.Path(report_path).write_text('\n'.join(lines) + '\n')
-PYCODE
+| Service | App Name | Image Digest | FQDN |
+|---|---|---|---|
+| database | $DATABASE_APP | $DB_IMAGE | $DB_FQDN |
+| backend | $BACKEND_APP | $BACK_IMAGE | $BACK_FQDN |
+| frontend | $FRONTEND_APP | $FRONT_IMAGE | $FQDN |
+EOF
 
-cat reports/deploy-report.md
+cat temp/reports/deployment_report.md
 echo "Frontend ($STAGE): https://$FQDN"
