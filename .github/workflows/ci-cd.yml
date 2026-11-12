@@ -7,25 +7,31 @@ permissions:
   contents: read
   id-token: write
 jobs:
-  test-and-build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install test dependencies
         run: python -m pip install -r backend/requirements.txt -r database/requirements.txt
-      - name: Run tests and produce test report
+      - name: Run DB/TASKS/SECURITY suites and produce test report
         run: bash scripts/post-test.sh
       - uses: actions/upload-artifact@v4
         with:
           name: test-report
-          path: reports/test-report.md
+          path: temp/reports/test_report.md
           if-no-files-found: error
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Build application containers
         run: bash scripts/build.sh
       - uses: azure/login@v2
@@ -36,6 +42,7 @@ jobs:
       - name: Publish tested source images to ACR
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          GITHUB_SHA: ${{ github.sha }}
           BUILD_MANIFEST: ${{ runner.temp }}/approved-build/images.json
         run: bash scripts/build.sh --publish
       - uses: actions/upload-artifact@v4
@@ -43,8 +50,13 @@ jobs:
           name: build-manifest
           path: ${{ runner.temp }}/approved-build/images.json
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-report
+          path: temp/reports/build_report.md
+          if-no-files-found: error
   deploy-dev:
-    needs: test-and-build
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,12 +78,13 @@ jobs:
           INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
           DEMO_USERNAME: ${{ secrets.DEMO_USERNAME }}
           DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+          GITHUB_SHA: ${{ github.sha }}
           BUILD_MANIFEST: ${{ runner.temp }}/approved-build/images.json
         run: bash scripts/deploy.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: deploy-report
-          path: reports/deploy-report.md
+          name: deployment-report
+          path: temp/reports/deployment_report.md
           if-no-files-found: error
   verify-dev:
     needs: deploy-dev
@@ -94,10 +107,10 @@ jobs:
         if: always()
         with:
           name: health-report
-          path: reports/health-report.md
+          path: temp/reports/results.md
           if-no-files-found: error
   review:
-    needs: [test-and-build, deploy-dev, verify-dev]
+    needs: [test, build, deploy-dev, verify-dev]
     runs-on: ubuntu-latest
     outputs:
       decision: ${{ steps.broker.outputs.decision }}
@@ -109,7 +122,7 @@ jobs:
         with:
           pattern: '*-report'
           merge-multiple: true
-          path: reports
+          path: temp/reports
       - name: Run private AI-Broker scanner
         id: broker
         env:
@@ -121,6 +134,7 @@ jobs:
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           GROQ_MODEL: ${{ vars.GROQ_MODEL }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER }}
+          GITHUB_SHA: ${{ github.sha }}
           BROKER_INPUT_DIR: ${{ runner.temp }}/broker-input
           BROKER_OUTPUT_DIR: ${{ runner.temp }}/broker-results
         run: bash scripts/review.sh
@@ -146,7 +160,7 @@ jobs:
         run: |
           test "$APPROVAL_GATE_ENABLED" = true || { echo 'Human approval is not enabled' >&2; exit 1; }
   promote:
-    needs: [test-and-build, review, approval]
+    needs: [build, review, approval]
     if: ${{ always() && needs.review.result == 'success' && (needs.review.outputs.decision == 'PASS' || (needs.review.outputs.decision == 'APPROVAL_REQUIRED' && needs.approval.result == 'success')) }}
     runs-on: ubuntu-latest
     steps:
@@ -169,12 +183,13 @@ jobs:
           INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
           DEMO_USERNAME: ${{ secrets.DEMO_USERNAME }}
           DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+          GITHUB_SHA: ${{ github.sha }}
           BUILD_MANIFEST: ${{ runner.temp }}/approved-build/images.json
         run: bash scripts/deploy.sh
       - uses: actions/upload-artifact@v4
         with:
           name: promote-report
-          path: reports/deploy-report.md
+          path: temp/reports/deployment_report.md
           if-no-files-found: error
   verify-promotion-job:
     needs: [review, approval, promote]
