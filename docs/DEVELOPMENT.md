@@ -16,7 +16,7 @@ This POC demonstrates a broker-based policy engine controlling deployments throu
 | Phase | Focus | Deliverable |
 |-------|-------|-------------|
 | 1 | Minimal working app | docker-compose up works, CRUD operations functional |
-| 2 | CI/CD automation | GitHub Actions pipeline builds, tests, publishes images with digests |
+| 2 | CI automation + evidence schema | GitHub Actions pipeline builds, tests, publishes images with digests; emits a Broker-ready evidence package (no Broker container invoked yet) |
 | 3 | Broker integration | Policy evaluation, approval gates, decision enforcement |
 | 4 | Deployment & verification | Immutable deployment by digest, post-deploy checks with stricter policy |
 | 5 | Polish & documentation | Tests, security checks, documentation, demo-ready |
@@ -118,10 +118,13 @@ DRA2.0-POC-Demo-app/
 - [x] Data persists across container restarts
 
 ### Phase 2
-- [ ] GitHub Actions CI/CD runs
+- [ ] GitHub Actions CI runs (build, test, publish images with digests)
 - [ ] Tests pass automatically
 - [ ] Docker images build and publish with digests
-- [ ] Evidence collected in JSON format
+- [ ] Evidence package matches the Broker's input schema (no Broker container invoked in this phase):
+  - `request.json`: `{"mode": "pre_deploy", "repository": "<owner/repo>", "commit": "<sha>", "evidence": ["<relative-filenames>"]}`
+  - Evidence files use relative paths only (no `../`, no absolute paths), valid UTF-8, ≤120 KiB each
+  - See [AI-Broker Reference](./broker.md#input-validation) for the full schema Phase 3 will consume
 
 ### Phase 3
 - [ ] Broker invocation works with evidence payload
