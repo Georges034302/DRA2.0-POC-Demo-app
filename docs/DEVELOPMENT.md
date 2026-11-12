@@ -34,54 +34,21 @@ This POC demonstrates a broker-based policy engine controlling deployments throu
 
 ```
 DRA2.0-POC-Demo-app/
-├─ frontend/
-│  ├─ Dockerfile
-│  ├─ nginx.conf
-│  ├─ templates/
-│  │  ├─ login.html
-│  │  └─ dashboard.html
-│  └─ static/
-│     ├─ css/style.css
-│     └─ js/app.js
-├─ backend/
-│  ├─ Dockerfile
-│  ├─ requirements.txt
-│  ├─ app.py (REST API + Bearer token auth)
-│  └─ tests/
-│     └─ test_tasks.py
-├─ database/
-│  ├─ Dockerfile
-│  ├─ requirements.txt
-│  ├─ app.py (CRUD API + X-Internal-Token auth)
-│  ├─ init-db.py (create schema, load seed data)
-│  └─ tests/
-│     └─ test_database.py
-├─ scripts/
-│  ├─ setup.sh (environment setup)
-│  ├─ env-setup.sh (configure .env variables)
-│  ├─ build.sh (test, build Docker images)
-│  ├─ review.sh (collect evidence for broker)
-│  ├─ deploy.sh (deploy using image digest)
-│  ├─ post-deploy.sh (post-deployment verification)
-│  ├─ validate.sh (syntax and security checks)
-│  └─ cleanup.sh (remove containers, volumes)
-├─ .github/workflows/
-│  ├─ ci-cd.yml (GitHub Actions: test → build → publish)
-│  └─ post-deployment.yml (post-deployment verification)
-├─ docs/
-│  ├─ architecture.md (system diagrams & design)
-│  ├─ DEVELOPMENT.md (this file)
-│  ├─ USAGE.md (quick start guide)
-│  ├─ broker.md (broker API reference)
-│  ├─ operations.md (operational tasks)
-│  ├─ glossary.md (terminology)
-│  ├─ CONTRIBUTING.md (contribution guidelines)
-│  └─ index.MD (documentation index)
-├─ docker-compose.yml (local dev environment)
-├─ .env.example (environment variables template)
-├─ .gitignore
-└─ README.md
+├── frontend/                       # Nginx reverse proxy + static assets + templates
+├── backend/                        # Flask API (calls the database service)
+├── database/                       # Flask CRUD API over SQLite
+├── docs/                           # Documentation hub (architecture, guides, reference)
+├── scripts/                        # Azure Container Apps setup/build/review/deploy/cleanup automation
+├── .github/                        # GitHub Actions workflows (CI/CD, post-deploy)
+├── docker-compose.yml              # 3-container orchestration config
+├── README.md                       # Project overview and quick start
+├── LICENSE                         # Proprietary license terms
+├── .env.example                    # Environment variables template
+├── .gitignore                      # Git ignore rules
+└── .git/                           # Git repository history
 ```
+
+> For the fully expanded, file-by-file layout, see [Repository Structure in architecture.md](./architecture.md#repository-structure).
 
 ## Development Workflow
 
@@ -186,5 +153,5 @@ DRA2.0-POC-Demo-app/
 - [Architecture & System Diagrams](./architecture.md)
 - [Broker Specification](./broker.md)
 - [Operations Guide](./operations.md)
-- [Quick Start](./USAGE.md)
+- [Quick Start](./USAGE.MD)
 - [Glossary](./glossary.md)
